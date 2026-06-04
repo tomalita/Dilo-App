@@ -402,15 +402,17 @@ function CoachDashboard({ user }) {
   //   This way a Wednesday class correctly shows Monday's notes (same week)
   //   instead of last Wednesday's notes.
 
-  // Parse all student notes for this coach
-  const parsedNotes = studentNotes
+  // All student notes — NO coach filter here.
+  // We match by the PAST EVENT's coach (col B), not the current coach.
+  // This handles coach rotation: Ricardo sees Ana's notes for Adriana's last session.
+  const allStudentNotes = studentNotes
     .filter(r => r.fecha && r.estudiante_nombre && r.coach && r.hora_clase)
     .map(r => {
       const raw = r.fecha.split(",")[0].trim();
       const [d, m, y] = raw.split("/");
       return { ...r, _date: new Date(+y, +m - 1, +d) };
     })
-    .filter(r => !isNaN(r._date) && r._date < nowTs && r.coach.split(" ")[0] === coachName);
+    .filter(r => !isNaN(r._date) && r._date < nowTs);
 
   let prevFeedback = [];
   if (nextClass) {
@@ -432,12 +434,7 @@ function CoachDashboard({ user }) {
 
     const nextSeriesId = nextClass.seriesId || null;
 
-    // Priority 1 — seriesId match: same recurring series regardless of day/time.
-    //   Handles rescheduled classes (same Teams link, different slot) and
-    //   distinguishes two classes at the same hour without needing summary.
-    // Priority 2 — same time + same summary (fallback when seriesId not yet available).
-    // Priority 3 — same time only (last resort).
-    const bySeriesId  = nextSeriesId
+    const bySeriesId = nextSeriesId
       ? pool.filter(ev => ev.seriesId && ev.seriesId === nextSeriesId)
            .sort((a, b) => b.date - a.date)
       : [];
@@ -452,8 +449,6 @@ function CoachDashboard({ user }) {
       return !nextSummary || !evSum || evSum === nextSummary;
     };
 
-    // Build candidate list sorted most-recent-first:
-    // priority 1 = seriesId, priority 2 = time+summary, priority 3 = time only
     const candidates =
       bySeriesId.length > 0 ? bySeriesId :
       (() => {
@@ -461,19 +456,27 @@ function CoachDashboard({ user }) {
         return ts.length > 0 ? ts : pool.filter(matchesTime).sort((a,b) => b.date - a.date);
       })();
 
-    // Walk most-recent → oldest; stop at the first event that has notes in the sheet.
+    // Walk most-recent → oldest; stop at the first event that has notes.
+    //
+    // Zero-error cross-check:
+    //   col B (coach)      = past Teams event's coach         — not the current coach
+    //   col C (hora_clase) = past Teams event's hour:minute   — disambiguates same-day classes
+    //   col A (fecha date) = within [ev.date, ev.date + 2d]  — col A is SUBMISSION timestamp,
+    //                        coaches may submit same day or up to 2 days after the class
     for (const ev of candidates) {
-      const dateStr = ev.date.toDateString();
-      // Always match hora_clase — use the PAST event's actual time, not the next class time.
-      // This correctly handles rescheduled classes (different hour than the series default)
-      // and prevents notes from other classes on the same day leaking in.
-      const evH    = ev.date.getHours();
-      const evM    = ev.date.getMinutes();
-      const ampm   = evH >= 12 ? "PM" : "AM";
-      const h12    = evH % 12 || 12;
-      const tStr   = `${h12}:${evM.toString().padStart(2,"0")} ${ampm}`;
-      const notes  = parsedNotes.filter(r =>
-        r._date.toDateString() === dateStr &&
+      const evDay    = new Date(ev.date); evDay.setHours(0, 0, 0, 0);
+      const evDayEnd = new Date(evDay);   evDayEnd.setDate(evDay.getDate() + 2);
+
+      const evH  = ev.date.getHours();
+      const evM  = ev.date.getMinutes();
+      const ampm = evH >= 12 ? "PM" : "AM";
+      const h12  = evH % 12 || 12;
+      const tStr = `${h12}:${evM.toString().padStart(2,"0")} ${ampm}`;
+
+      const notes = allStudentNotes.filter(r =>
+        r._date >= evDay &&
+        r._date <= evDayEnd &&
+        r.coach.split(" ")[0] === ev.coach &&
         (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase()
       );
       if (notes.length > 0) { prevFeedback = notes; break; }
