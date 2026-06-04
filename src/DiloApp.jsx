@@ -430,17 +430,24 @@ function CoachDashboard({ user }) {
       return true;
     });
 
-    // Find the most recent past occurrence of this same class
-    const prevClassEv = pool
-      .filter(ev => {
-        if (ev.coach !== coachName) return false;
-        if (ev.date.getHours()   !== nextHour) return false;
-        if (ev.date.getMinutes() !== nextMin)  return false;
-        const evSum = (ev.summary || "").toLowerCase().trim();
-        if (nextSummary && evSum && evSum !== nextSummary) return false;
-        return true;
-      })
-      .sort((a, b) => b.date - a.date)[0] || null;
+    // Helpers
+    const matchesTime = ev =>
+      ev.coach === coachName &&
+      ev.date.getHours()   === nextHour &&
+      ev.date.getMinutes() === nextMin;
+
+    const matchesSummary = ev => {
+      const evSum = (ev.summary || "").toLowerCase().trim();
+      // Only filter when BOTH sides have a non-empty summary
+      return !nextSummary || !evSum || evSum === nextSummary;
+    };
+
+    // Primary: same time + same summary (distinguishes two classes at same hour)
+    // Fallback: same time only (handles Teams varying titles across occurrences)
+    let prevClassEv =
+      pool.filter(ev => matchesTime(ev) && matchesSummary(ev)).sort((a, b) => b.date - a.date)[0] ||
+      pool.filter(matchesTime).sort((a, b) => b.date - a.date)[0] ||
+      null;
 
     if (prevClassEv) {
       const dateStr   = prevClassEv.date.toDateString();
