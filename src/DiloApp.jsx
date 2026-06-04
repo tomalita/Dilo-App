@@ -461,22 +461,21 @@ function CoachDashboard({ user }) {
         return ts.length > 0 ? ts : pool.filter(matchesTime).sort((a,b) => b.date - a.date);
       })();
 
-    const ampm      = nextHour >= 12 ? "PM" : "AM";
-    const h12       = nextHour % 12 || 12;
-    const evTimeStr = `${h12}:${nextMin.toString().padStart(2,"0")} ${ampm}`;
-
     // Walk most-recent → oldest; stop at the first event that has notes in the sheet.
-    // This handles the case where the most recent class hasn't been noted yet.
     for (const ev of candidates) {
       const dateStr = ev.date.toDateString();
-      const notes = (nextSeriesId && ev.seriesId === nextSeriesId)
-        // seriesId match → class is unambiguous, skip hora_clase (avoids timezone mismatch)
-        ? parsedNotes.filter(r => r._date.toDateString() === dateStr)
-        // fallback → require hora_clase match too
-        : parsedNotes.filter(r =>
-            r._date.toDateString() === dateStr &&
-            (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === evTimeStr.toUpperCase()
-          );
+      // Always match hora_clase — use the PAST event's actual time, not the next class time.
+      // This correctly handles rescheduled classes (different hour than the series default)
+      // and prevents notes from other classes on the same day leaking in.
+      const evH    = ev.date.getHours();
+      const evM    = ev.date.getMinutes();
+      const ampm   = evH >= 12 ? "PM" : "AM";
+      const h12    = evH % 12 || 12;
+      const tStr   = `${h12}:${evM.toString().padStart(2,"0")} ${ampm}`;
+      const notes  = parsedNotes.filter(r =>
+        r._date.toDateString() === dateStr &&
+        (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase()
+      );
       if (notes.length > 0) { prevFeedback = notes; break; }
     }
   }
