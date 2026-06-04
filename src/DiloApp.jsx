@@ -459,16 +459,24 @@ function CoachDashboard({ user }) {
       null;
 
     if (prevClassEv) {
-      const dateStr   = prevClassEv.date.toDateString();
-      const ampm      = nextHour >= 12 ? "PM" : "AM";
-      const h12       = nextHour % 12 || 12;
-      const evTimeStr = `${h12}:${nextMin.toString().padStart(2,"0")} ${ampm}`;
+      const dateStr      = prevClassEv.date.toDateString();
+      const foundBySeries = nextSeriesId && prevClassEv.seriesId === nextSeriesId;
 
-      // Cross-check: fecha (col A) + hora_clase (col C)
-      prevFeedback = parsedNotes.filter(r =>
-        r._date.toDateString() === dateStr &&
-        (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === evTimeStr.toUpperCase()
-      );
+      if (foundBySeries) {
+        // seriesId match → we know exactly which class this is.
+        // Skip hora_clase check to avoid timezone mismatches between
+        // how Teams stores the time vs how the coach writes it in the sheet.
+        prevFeedback = parsedNotes.filter(r => r._date.toDateString() === dateStr);
+      } else {
+        // Fallback: cross-check date (col A) + hora_clase (col C)
+        const ampm      = nextHour >= 12 ? "PM" : "AM";
+        const h12       = nextHour % 12 || 12;
+        const evTimeStr = `${h12}:${nextMin.toString().padStart(2,"0")} ${ampm}`;
+        prevFeedback = parsedNotes.filter(r =>
+          r._date.toDateString() === dateStr &&
+          (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === evTimeStr.toUpperCase()
+        );
+      }
     }
   }
 
