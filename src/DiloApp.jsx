@@ -452,31 +452,32 @@ function CoachDashboard({ user }) {
       return !nextSummary || !evSum || evSum === nextSummary;
     };
 
-    const prevClassEv =
-      bySeriesId[0] ||
-      pool.filter(ev => matchesTime(ev) && matchesSummary(ev)).sort((a, b) => b.date - a.date)[0] ||
-      pool.filter(matchesTime).sort((a, b) => b.date - a.date)[0] ||
-      null;
+    // Build candidate list sorted most-recent-first:
+    // priority 1 = seriesId, priority 2 = time+summary, priority 3 = time only
+    const candidates =
+      bySeriesId.length > 0 ? bySeriesId :
+      (() => {
+        const ts = pool.filter(ev => matchesTime(ev) && matchesSummary(ev)).sort((a,b) => b.date - a.date);
+        return ts.length > 0 ? ts : pool.filter(matchesTime).sort((a,b) => b.date - a.date);
+      })();
 
-    if (prevClassEv) {
-      const dateStr      = prevClassEv.date.toDateString();
-      const foundBySeries = nextSeriesId && prevClassEv.seriesId === nextSeriesId;
+    const ampm      = nextHour >= 12 ? "PM" : "AM";
+    const h12       = nextHour % 12 || 12;
+    const evTimeStr = `${h12}:${nextMin.toString().padStart(2,"0")} ${ampm}`;
 
-      if (foundBySeries) {
-        // seriesId match → we know exactly which class this is.
-        // Skip hora_clase check to avoid timezone mismatches between
-        // how Teams stores the time vs how the coach writes it in the sheet.
-        prevFeedback = parsedNotes.filter(r => r._date.toDateString() === dateStr);
-      } else {
-        // Fallback: cross-check date (col A) + hora_clase (col C)
-        const ampm      = nextHour >= 12 ? "PM" : "AM";
-        const h12       = nextHour % 12 || 12;
-        const evTimeStr = `${h12}:${nextMin.toString().padStart(2,"0")} ${ampm}`;
-        prevFeedback = parsedNotes.filter(r =>
-          r._date.toDateString() === dateStr &&
-          (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === evTimeStr.toUpperCase()
-        );
-      }
+    // Walk most-recent → oldest; stop at the first event that has notes in the sheet.
+    // This handles the case where the most recent class hasn't been noted yet.
+    for (const ev of candidates) {
+      const dateStr = ev.date.toDateString();
+      const notes = (nextSeriesId && ev.seriesId === nextSeriesId)
+        // seriesId match → class is unambiguous, skip hora_clase (avoids timezone mismatch)
+        ? parsedNotes.filter(r => r._date.toDateString() === dateStr)
+        // fallback → require hora_clase match too
+        : parsedNotes.filter(r =>
+            r._date.toDateString() === dateStr &&
+            (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === evTimeStr.toUpperCase()
+          );
+      if (notes.length > 0) { prevFeedback = notes; break; }
     }
   }
 
