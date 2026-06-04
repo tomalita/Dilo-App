@@ -392,11 +392,15 @@ function CoachDashboard({ user }) {
   const nowTs = new Date();
   const nextClass = myClasses.filter(ev => ev.date >= nowTs).sort((a,b) => a.date - b.date)[0] || null;
 
-  // Pre-class briefing — simplified algorithm:
-  //   1. Look at previous week's Teams calendar (weekCache[-1]).
-  //   2. Find the event that matches next class: same coach + same weekday + same exact hour.
-  //   3. Cross-check that event's date against student notes sheet (col A fecha + col C hora_clase).
+  // Pre-class briefing — algorithm:
+  //   1. Pool current week's PAST events + all of previous week.
+  //   2. Find the most recent past occurrence of this same class
+  //      (same coach + same hour:minute + same summary).
+  //   3. Cross-check that event's date against student notes sheet
+  //      (col A fecha + col C hora_clase).
   //   4. Show those notes to the coach.
+  //   This way a Wednesday class correctly shows Monday's notes (same week)
+  //   instead of last Wednesday's notes.
 
   // Parse all student notes for this coach
   const parsedNotes = studentNotes
@@ -414,22 +418,29 @@ function CoachDashboard({ user }) {
     const nextMin     = nextClass.date.getMinutes();
     const nextSummary = (nextClass.summary || "").toLowerCase().trim();
 
-    // Find the most recent past occurrence of this same class in the previous week.
-    // Match by: coach + exact hour:minute + event summary (title).
-    // Do NOT filter by weekday — a Tue+Thu class must show the most recent session
-    // (e.g. last-Thursday notes when the next class is Tuesday, not last-Tuesday notes).
-    const prevWeekEvs = weekCache[-1] || [];
-    const prevClassEv = prevWeekEvs
+    // Pool: current week (past only) + previous week — deduplicated by uid
+    const seen = new Set();
+    const pool = [
+      ...(weekCache[0]  || []).filter(ev => ev.date < nowTs),
+      ...(weekCache[-1] || []),
+    ].filter(ev => {
+      const key = ev.uid || (ev.summary + ev.date.toISOString());
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Find the most recent past occurrence of this same class
+    const prevClassEv = pool
       .filter(ev => {
         if (ev.coach !== coachName) return false;
         if (ev.date.getHours()   !== nextHour) return false;
         if (ev.date.getMinutes() !== nextMin)  return false;
-        // When both events have a summary, require them to match
         const evSum = (ev.summary || "").toLowerCase().trim();
         if (nextSummary && evSum && evSum !== nextSummary) return false;
         return true;
       })
-      .sort((a, b) => b.date - a.date)[0] || null; // most recent first
+      .sort((a, b) => b.date - a.date)[0] || null;
 
     if (prevClassEv) {
       const dateStr   = prevClassEv.date.toDateString();
