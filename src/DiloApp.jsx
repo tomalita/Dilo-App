@@ -430,7 +430,18 @@ function CoachDashboard({ user }) {
       return true;
     });
 
-    // Helpers
+    const nextSeriesId = nextClass.seriesId || null;
+
+    // Priority 1 — seriesId match: same recurring series regardless of day/time.
+    //   Handles rescheduled classes (same Teams link, different slot) and
+    //   distinguishes two classes at the same hour without needing summary.
+    // Priority 2 — same time + same summary (fallback when seriesId not yet available).
+    // Priority 3 — same time only (last resort).
+    const bySeriesId  = nextSeriesId
+      ? pool.filter(ev => ev.seriesId && ev.seriesId === nextSeriesId)
+           .sort((a, b) => b.date - a.date)
+      : [];
+
     const matchesTime = ev =>
       ev.coach === coachName &&
       ev.date.getHours()   === nextHour &&
@@ -438,13 +449,11 @@ function CoachDashboard({ user }) {
 
     const matchesSummary = ev => {
       const evSum = (ev.summary || "").toLowerCase().trim();
-      // Only filter when BOTH sides have a non-empty summary
       return !nextSummary || !evSum || evSum === nextSummary;
     };
 
-    // Primary: same time + same summary (distinguishes two classes at same hour)
-    // Fallback: same time only (handles Teams varying titles across occurrences)
-    let prevClassEv =
+    const prevClassEv =
+      bySeriesId[0] ||
       pool.filter(ev => matchesTime(ev) && matchesSummary(ev)).sort((a, b) => b.date - a.date)[0] ||
       pool.filter(matchesTime).sort((a, b) => b.date - a.date)[0] ||
       null;
