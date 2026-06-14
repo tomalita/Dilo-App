@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d0b08" />
+  <title>Dilo Dynamic Class</title>
+  <meta property="og:title" content="Dilo Dynamic Class" />
+  <meta property="og:description" content="Off we go" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://dilo.club/app/apple-touch-icon.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Dilo Dynamic Class" />
+  <meta name="twitter:description" content="Off we go" />
+  <link rel="icon" type="image/x-icon" href="/app/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/app/apple-touch-icon.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    :root{--bg:#0d0b08;--surface:#1e1b17;--border:rgba(240,236,224,0.1);--text:#f0ece0;--text2:rgba(240,236,224,0.5);--text3:rgba(240,236,224,0.25)}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Archivo',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;overscroll-behavior:none}
+    .screen{display:none;flex:1;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;padding-bottom:max(1.5rem,env(safe-area-inset-bottom));text-align:center}
+    .screen.active{display:flex}
+    .logo{margin-bottom:2rem}
+    .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);margin-bottom:.5rem}
+    .heading{font-size:clamp(1.6rem,6vw,2.5rem);font-weight:900;letter-spacing:-.02em;color:var(--text);margin-bottom:.5rem;line-height:1.1}
+    .sub{font-size:14px;color:var(--text2);margin-bottom:2rem;line-height:1.5}
+    .field{width:100%;max-width:360px;margin-bottom:1rem;text-align:left}
+    .field label{display:block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:.4rem}
+    .field input{width:100%;background:rgba(240,236,224,0.05);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Archivo',sans-serif;font-size:16px;font-weight:600;padding:.8rem 1rem;outline:none;transition:border-color .15s;-webkit-appearance:none;letter-spacing:.04em}
+    .field input:focus{border-color:rgba(240,236,224,0.3)}
+    .field input.code-input{font-size:24px;letter-spacing:.2em;text-align:center;text-transform:uppercase}
+    .btn{width:100%;max-width:360px;background:var(--text);color:var(--bg);border:none;border-radius:50px;font-family:'Archivo',sans-serif;font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:1rem 2rem;cursor:pointer;transition:opacity .2s;min-height:52px}
+    .btn:hover{opacity:.85}
+    .btn:disabled{opacity:.35;cursor:default}
+    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:50px;font-family:'Archivo',sans-serif;font-size:13px;font-weight:600;padding:.65rem 1.5rem;cursor:pointer;transition:all .15s;min-height:44px}
+    .btn-ghost:hover{border-color:rgba(240,236,224,0.25);color:var(--text)}
+    .err{font-size:13px;color:#e74c3c;margin-top:.5rem;min-height:18px;text-align:center;max-width:360px}
+    /* Waiting */
+    .code-big{font-size:clamp(3rem,12vw,5rem);font-weight:900;letter-spacing:.2em;color:var(--text);line-height:1}
+    .dots span{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text3);margin:0 3px;animation:pulse 1.2s ease-in-out infinite}
+    .dots span:nth-child(2){animation-delay:.2s}
+    .dots span:nth-child(3){animation-delay:.4s}
+    @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+    /* Slide */
+    .slide-progress{display:flex;gap:4px;margin-bottom:2rem;width:100%;max-width:480px}
+    .slide-progress-dot{flex:1;height:4px;border-radius:2px;background:rgba(240,236,224,0.15)}
+    .slide-progress-dot.done{background:var(--text3)}
+    .slide-progress-dot.active{background:var(--text)}
+    .timer-bar{width:100%;max-width:480px;height:5px;background:rgba(240,236,224,0.1);border-radius:3px;margin-bottom:1.5rem;overflow:hidden}
+    .timer-fill{height:100%;background:var(--text);border-radius:3px;transition:width 1s linear}
+    .question-text{font-size:clamp(1.1rem,4vw,1.6rem);font-weight:700;color:var(--text);margin-bottom:2rem;line-height:1.3;max-width:480px}
+    .options-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;width:100%;max-width:480px}
+    .opt-btn{background:transparent;border:2px solid var(--opt-color,var(--border));border-radius:14px;padding:1.1rem 1rem;font-family:'Archivo',sans-serif;font-size:clamp(13px,3vw,15px);font-weight:600;color:var(--text);cursor:pointer;transition:background .12s,color .12s;min-height:68px;text-align:center;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation;line-height:1.3}
+    .opt-btn:active:not(:disabled){opacity:.8}
+    .opt-btn:disabled{cursor:default}
+    .opt-btn.selected{background:var(--opt-color);color:#fff}
+    .opt-btn.correct{background:var(--opt-color);color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,0.25)}
+    .opt-btn.wrong{opacity:.3}
+    /* slide media */
+    .slide-media{width:100%;max-width:480px;margin-bottom:1.25rem;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+    .slide-media img{width:100%;max-height:220px;object-fit:cover;display:block}
+    .slide-media iframe{width:100%;height:220px;border:none;display:block}
+    /* Answered */
+    .check-circle{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-size:32px}
+    /* Info slide */
+    .info-content{font-size:clamp(1rem,3.5vw,1.4rem);font-weight:500;color:var(--text);max-width:480px;line-height:1.5;text-align:center}
+    .chip{display:inline-block;background:rgba(240,236,224,0.08);border:1px solid var(--border);border-radius:20px;padding:.3rem .9rem;font-size:12px;font-weight:600;color:var(--text2);margin:.25rem}
+    /* Open question */
+    .open-area{width:100%;max-width:480px;display:flex;flex-direction:column;gap:.75rem;align-items:center}
+    .open-textarea{width:100%;background:rgba(240,236,224,0.05);border:1px solid var(--border);border-radius:12px;padding:.9rem 1rem;color:var(--text);font-family:'Archivo',sans-serif;font-size:15px;resize:none;outline:none;min-height:120px;transition:border-color .15s}
+    .open-textarea:focus{border-color:rgba(240,236,224,0.3)}
+    .open-sent{font-size:13px;color:var(--text2);text-align:center}
+  </style>
+</head>
+<body>
+
+<!-- SCREEN: JOIN -->
+<div class="screen active" id="sc-join">
+  <div class="logo">
+    <svg height="36" width="90" viewBox="80 270 640 290" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M163.5 346C209.063 346 246 386.966 246 437.5C246 488.034 209.063 529 163.5 529C117.937 529 81 488.034 81 437.5C81 386.966 117.937 346 163.5 346ZM173.5 386C162.813 386 153.349 388.087 146 395C136.068 404.343 130 420.812 130 437C130 453.188 134.568 469.157 144.5 478.5C152.5 486.025 162.813 488 173.5 488C208 483.5 219 465.167 219 437C220 406.5 199.5 388.5 173.5 386Z" fill="#f0ece0"/>
+      <path d="M254 524V272L207 276V475L218.5 509L229 524H254Z" fill="#f0ece0"/>
+      <path d="M343 351H296V524H343V351Z" fill="#f0ece0"/>
+      <path d="M346 300.5C346 315.136 334.136 327 319.5 327C304.864 327 293 315.136 293 300.5C293 285.864 304.864 274 319.5 274C334.136 274 346 285.864 346 300.5Z" fill="#f0ece0"/>
+      <path d="M385 523.5V276L431 272V523.5H385Z" fill="#f0ece0"/>
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M554.5 346C613.5 346 646 386.966 646 437.5C646 488.034 613.5 527.5 554.5 527.5C491 527.5 463 488.034 463 437.5C463 386.966 494 346 554.5 346ZM555.5 386C526.738 386 512 407.376 512 437.446C512 467.516 525.311 488 555.5 488C578 488 599 467.516 599 437.446C599 407.376 580.5 386 555.5 386Z" fill="#f0ece0"/>
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M692 471C706.359 471 718 482.641 718 497C718 511.359 706.359 523 692 523C677.641 523 666 511.359 666 497C666 482.641 677.641 471 692 471ZM692 479C682.059 479 674 487.283 674 497.5C674 507.717 682.059 516 692 516C701.941 516 710 507.717 710 497.5C710 487.283 701.941 479 692 479Z" fill="#f0ece0"/>
+    </svg>
+  </div>
+  <p class="eyebrow">Interactive class</p>
+  <h1 class="heading">Join the session</h1>
+  <p class="sub">Enter the code your coach gave you<br>and your name to get started.</p>
+  <div class="field">
+    <label>Session code</label>
+    <input class="code-input" id="inp-code" type="text" maxlength="6" placeholder="XXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+  </div>
+  <div class="field">
+    <label>Your name</label>
+    <input id="inp-name" type="text" placeholder="What's your name?" autocomplete="name" />
+  </div>
+  <p class="err" id="err-join"></p>
+  <button class="btn" id="btn-join" onclick="joinSession()">Join</button>
+</div>
+
+<!-- SCREEN: WAITING -->
+<div class="screen" id="sc-waiting">
+  <div class="logo" style="margin-bottom:1.5rem">
+    <svg height="22" width="55" viewBox="80 270 640 290" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M163.5 346C209.063 346 246 386.966 246 437.5C246 488.034 209.063 529 163.5 529C117.937 529 81 488.034 81 437.5C81 386.966 117.937 346 163.5 346ZM173.5 386C162.813 386 153.349 388.087 146 395C136.068 404.343 130 420.812 130 437C130 453.188 134.568 469.157 144.5 478.5C152.5 486.025 162.813 488 173.5 488C208 483.5 219 465.167 219 437C220 406.5 199.5 388.5 173.5 386Z" fill="#f0ece0"/>
+      <path d="M254 524V272L207 276V475L218.5 509L229 524H254Z" fill="#f0ece0"/>
+      <path d="M343 351H296V524H343V351Z" fill="#f0ece0"/>
+      <path d="M346 300.5C346 315.136 334.136 327 319.5 327C304.864 327 293 315.136 293 300.5C293 285.864 304.864 274 319.5 274C334.136 274 346 285.864 346 300.5Z" fill="#f0ece0"/>
+      <path d="M385 523.5V276L431 272V523.5H385Z" fill="#f0ece0"/>
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M554.5 346C613.5 346 646 386.966 646 437.5C646 488.034 613.5 527.5 554.5 527.5C491 527.5 463 488.034 463 437.5C463 386.966 494 346 554.5 346ZM555.5 386C526.738 386 512 407.376 512 437.446C512 467.516 525.311 488 555.5 488C578 488 599 467.516 599 437.446C599 407.376 580.5 386 555.5 386Z" fill="#f0ece0"/>
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M692 471C706.359 471 718 482.641 718 497C718 511.359 706.359 523 692 523C677.641 523 666 511.359 666 497C666 482.641 677.641 471 692 471ZM692 479C682.059 479 674 487.283 674 497.5C674 507.717 682.059 516 692 516C701.941 516 710 507.717 710 497.5C710 487.283 701.941 479 692 479Z" fill="#f0ece0"/>
+    </svg>
+  </div>
+  <p class="eyebrow">Sesión <span id="wait-code"></span></p>
+  <p class="heading" id="wait-name" style="font-size:1.4rem;margin-bottom:1.5rem"></p>
+  <p style="font-size:14px;color:var(--text2);margin-bottom:1rem">Waiting for your coach to start the session</p>
+  <div class="dots"><span></span><span></span><span></span></div>
+</div>
+
+<!-- SCREEN: SLIDE -->
+<div class="screen" id="sc-slide" style="justify-content:flex-start;padding-top:max(1.5rem,env(safe-area-inset-top))">
+  <div class="slide-progress" id="slide-progress"></div>
+  <div class="timer-bar"><div class="timer-fill" id="timer-fill" style="width:100%"></div></div>
+  <p class="eyebrow" id="slide-type-label" style="margin-bottom:1rem"></p>
+  <div id="slide-media" style="display:none" class="slide-media"></div>
+  <p class="question-text" id="slide-question"></p>
+  <div class="options-grid" id="options-grid"></div>
+  <div class="info-content" id="info-content" style="display:none"></div>
+  <div class="open-area" id="open-question-area" style="display:none">
+    <textarea class="open-textarea" id="open-answer" placeholder="Write your answer..." rows="4"></textarea>
+    <button class="btn" id="open-submit" onclick="submitOpenAnswer()">Send answer</button>
+    <p class="open-sent" id="open-sent" style="display:none">✓ Answer sent</p>
+  </div>
+</div>
+
+<!-- SCREEN: ANSWERED -->
+<div class="screen" id="sc-answered">
+  <div class="check-circle" id="answer-icon" style="background:rgba(109,181,138,0.12);border:1px solid rgba(109,181,138,0.25)">✓</div>
+  <h2 class="heading" id="answer-title" style="font-size:1.6rem;margin-bottom:.5rem">Answer sent</h2>
+  <p class="sub" id="answer-sub">Waiting for your coach to continue</p>
+</div>
+
+<!-- SCREEN: ENDED -->
+<div class="screen" id="sc-ended">
+  <p style="font-size:48px;margin-bottom:1.5rem">🎉</p>
+  <h2 class="heading">Session complete!</h2>
+  <p class="sub">Thanks for participating.</p>
+</div>
+
+<script>
+const SUPABASE_URL  = 'https://zadynxqasghbufqzrgfy.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHlueHFhc2doYnVmcXpyZ2Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NzI1MDYsImV4cCI6MjA5NDA0ODUwNn0.Utn2e0DPRAlrzk8M5iKs0BS-UfVM6JIL3trH9PN0hKk';
+const OPT_COLORS    = ['#7a2020','#1e427a','#7a621e','#1e6645'];
+const OPT_LABELS    = ['A','B','C','D'];
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+function getYouTubeId(url) {
+  const m = (url || '').match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+let state = {
+  sessionId:     null,
+  participantId: null,
+  session:       null,
+  slides:        [],
+  myAnswers:     {},
+  timerInterval: null,
+  channel:       null,
+};
+
+// Pre-fill code from URL
+const urlCode = new URLSearchParams(location.search).get('code');
+if (urlCode) document.getElementById('inp-code').value = urlCode.toUpperCase();
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+async function joinSession() {
+  const code = document.getElementById('inp-code').value.trim().toUpperCase();
+  const name = document.getElementById('inp-name').value.trim();
+  const errEl = document.getElementById('err-join');
+  const btn   = document.getElementById('btn-join');
+
+  errEl.textContent = '';
+  if (!code || code.length < 6) { errEl.textContent = 'Enter the 6-character code.'; return; }
+  if (!name) { errEl.textContent = 'Enter your name.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Connecting...';
+
+  // Find session by code
+  const { data: sess, error: sessErr } = await sb
+    .from('sessions')
+    .select('*')
+    .eq('code', code)
+    .neq('status', 'ended')
+    .single();
+
+  if (sessErr || !sess) {
+    errEl.textContent = 'Invalid code or session already ended.';
+    btn.disabled = false; btn.textContent = 'Join'; return;
+  }
+
+  // Join as participant
+  const { data: participant, error: pErr } = await sb
+    .from('session_participants')
+    .insert({ session_id: sess.id, name })
+    .select().single();
+
+  if (pErr) {
+    errEl.textContent = 'Error joining. Please try again.';
+    btn.disabled = false; btn.textContent = 'Join'; return;
+  }
+
+  // Load slides
+  const { data: slides } = await sb
+    .from('slides')
+    .select('*')
+    .eq('deck_id', sess.deck_id)
+    .order('position');
+
+  state.sessionId     = sess.id;
+  state.participantId = participant.id;
+  state.session       = sess;
+  state.slides        = slides || [];
+
+  subscribeToSession();
+
+  if (sess.status === 'waiting') {
+    document.getElementById('wait-code').textContent = code;
+    document.getElementById('wait-name').textContent = 'Hey, ' + name + '!';
+    show('sc-waiting');
+  } else if (sess.status === 'active') {
+    renderSlide(sess.current_slide_index);
+  }
+}
+
+function subscribeToSession() {
+  state.channel = sb.channel('student-session-' + state.sessionId)
+    .on('postgres_changes', {
+      event: 'UPDATE', schema: 'public', table: 'sessions',
+      filter: 'id=eq.' + state.sessionId
+    }, payload => handleSessionUpdate(payload.new))
+    .subscribe();
+}
+
+function handleSessionUpdate(updated) {
+  const prev = state.session;
+  state.session = { ...state.session, ...updated };
+
+  if (updated.status === 'ended') { show('sc-ended'); return; }
+
+  if (updated.status === 'active') {
+    if (prev.status === 'waiting' || updated.current_slide_index !== prev.current_slide_index) {
+      renderSlide(updated.current_slide_index);
+    }
+  }
+}
+
+function renderSlide(idx) {
+  clearTimer();
+  const slide = state.slides[idx];
+  if (!slide) { show('sc-ended'); return; }
+
+  // Progress dots
+  const prog = document.getElementById('slide-progress');
+  prog.innerHTML = state.slides.map((_, i) =>
+    `<div class="slide-progress-dot ${i < idx ? 'done' : i === idx ? 'active' : ''}"></div>`
+  ).join('');
+
+  const TYPE_LABEL = {story:'Historia',story_choice:'Elige el camino',open_question:'Pregunta abierta',info:'Información'};
+  document.getElementById('slide-type-label').textContent =
+    TYPE_LABEL[slide.type] || `Pregunta ${idx + 1} de ${state.slides.length}`;
+
+  const qEl      = document.getElementById('slide-question');
+  const optGrid  = document.getElementById('options-grid');
+  const infoCont = document.getElementById('info-content');
+  const openArea = document.getElementById('open-question-area');
+  const alreadyAnswered = state.myAnswers[slide.id] !== undefined;
+
+  // Reset all content areas
+  optGrid.style.display  = 'none';
+  infoCont.style.display = 'none';
+  openArea.style.display = 'none';
+  qEl.textContent        = '';
+
+  // Media (image / youtube)
+  const mediaEl = document.getElementById('slide-media');
+  const ytId = getYouTubeId(slide.video_url);
+  if (slide.image_url) {
+    mediaEl.innerHTML = `<img src="${slide.image_url}" alt="" onerror="this.parentElement.style.display='none'">`;
+    mediaEl.style.display = 'block';
+  } else if (ytId) {
+    mediaEl.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}" allow="accelerometer;autoplay;encrypted-media;picture-in-picture" allowfullscreen></iframe>`;
+    mediaEl.style.display = 'block';
+  } else {
+    mediaEl.style.display = 'none';
+    mediaEl.innerHTML = '';
+  }
+
+  if (slide.type === 'story' || slide.type === 'info') {
+    infoCont.style.display  = 'block';
+    infoCont.textContent    = slide.question || '';
+    infoCont.style.fontWeight  = slide.type === 'story' ? '400' : '500';
+    infoCont.style.lineHeight  = slide.type === 'story' ? '1.65' : '1.5';
+    document.getElementById('timer-fill').style.width = '0%';
+    show('sc-slide');
+    return;
+  }
+
+  qEl.textContent = slide.question || '';
+
+  if (slide.type === 'open_question') {
+    openArea.style.display = 'flex';
+    const ta     = document.getElementById('open-answer');
+    const btn    = document.getElementById('open-submit');
+    const sentEl = document.getElementById('open-sent');
+    ta.value          = alreadyAnswered ? (state.myAnswers[slide.id] || '') : '';
+    ta.disabled       = alreadyAnswered;
+    btn.style.display = alreadyAnswered ? 'none' : 'block';
+    sentEl.style.display = alreadyAnswered ? 'block' : 'none';
+    document.getElementById('timer-fill').style.width = '0%';
+    show('sc-slide');
+    return;
+  }
+
+  // multiple_choice or story_choice
+  optGrid.style.display = 'grid';
+  const opts = (slide.options || []).filter(o => o);
+  const canReAnswer = true;
+  optGrid.innerHTML = opts.map((opt, oi) => {
+    const selected  = alreadyAnswered && state.myAnswers[slide.id] === String(oi);
+    const isCorrect = slide.type === 'multiple_choice' && slide.correct_answer === oi;
+    let cls = 'opt-btn';
+    if (alreadyAnswered) {
+      if (slide.type === 'multiple_choice' && slide.correct_answer !== null) {
+        if (isCorrect) cls += ' correct';
+        else if (selected) cls += ' wrong selected';
+        else cls += ' wrong';
+      } else if (selected) cls += ' selected';
+    }
+    const disabled = alreadyAnswered && !canReAnswer;
+    return `<button class="${cls}" style="--opt-color:${OPT_COLORS[oi]}" ${disabled ? 'disabled' : ''} onclick="submitAnswer('${slide.id}',${oi})">${opt}</button>`;
+  }).join('');
+
+  if (slide.time_limit > 0 && !alreadyAnswered) startTimer(slide.time_limit);
+  else document.getElementById('timer-fill').style.width = alreadyAnswered ? '0%' : '100%';
+
+  show('sc-slide');
+}
+
+function startTimer(seconds) {
+  let remaining = seconds;
+  const fill = document.getElementById('timer-fill');
+  fill.style.transition = 'none';
+  fill.style.width = '100%';
+  setTimeout(() => { fill.style.transition = `width ${seconds}s linear`; fill.style.width = '0%'; }, 50);
+  state.timerInterval = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) clearTimer();
+  }, 1000);
+}
+
+function clearTimer() {
+  if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+}
+
+async function submitAnswer(slideId, optionIndex) {
+  const slide = state.slides.find(s => s.id === slideId);
+  const alreadyAnswered = state.myAnswers[slideId] !== undefined;
+
+  state.myAnswers[slideId] = String(optionIndex);
+
+  const isCorrect = (slide?.type === 'multiple_choice' && slide?.correct_answer !== null)
+    ? slide.correct_answer === optionIndex : null;
+
+  if (alreadyAnswered) {
+    // DELETE + INSERT so coach's INSERT subscription sees the updated vote
+    await sb.from('responses')
+      .delete()
+      .eq('session_id', state.sessionId)
+      .eq('slide_id', slideId)
+      .eq('participant_id', state.participantId);
+  }
+
+  await sb.from('responses').insert({
+    session_id:     state.sessionId,
+    slide_id:       slideId,
+    participant_id: state.participantId,
+    answer:         String(optionIndex),
+    is_correct:     isCorrect,
+  });
+
+  clearTimer();
+
+  if (slide?.type === 'multiple_choice' && slide?.correct_answer !== null) {
+    const correct = slide.correct_answer === optionIndex;
+    const icon  = document.getElementById('answer-icon');
+    const title = document.getElementById('answer-title');
+    const sub   = document.getElementById('answer-sub');
+    icon.textContent      = correct ? '✓' : '✗';
+    icon.style.background = correct ? 'rgba(46,204,113,0.12)' : 'rgba(231,76,60,0.12)';
+    icon.style.border     = correct ? '1px solid rgba(46,204,113,0.3)' : '1px solid rgba(231,76,60,0.3)';
+    title.textContent = correct ? 'Correct!' : 'Incorrect';
+    sub.textContent   = 'Waiting for your coach to continue';
+    show('sc-answered');
+    setTimeout(() => renderSlide(state.session.current_slide_index), 1800);
+  } else {
+    renderSlide(state.session.current_slide_index);
+  }
+}
+
+async function submitOpenAnswer() {
+  const idx   = state.session?.current_slide_index;
+  const slide = state.slides[idx];
+  if (!slide || state.myAnswers[slide.id] !== undefined) return;
+
+  const ta   = document.getElementById('open-answer');
+  const text = ta.value.trim();
+  if (!text) { ta.focus(); return; }
+
+  state.myAnswers[slide.id] = text;
+  ta.disabled = true;
+  document.getElementById('open-submit').style.display = 'none';
+  document.getElementById('open-sent').style.display   = 'block';
+
+  await sb.from('responses').insert({
+    session_id:     state.sessionId,
+    slide_id:       slide.id,
+    participant_id: state.participantId,
+    answer:         text,
+    is_correct:     null,
+  });
+}
+
+// Enter key on inputs
+document.getElementById('inp-code').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('inp-name').focus(); });
+document.getElementById('inp-name').addEventListener('keydown', e => { if(e.key==='Enter') joinSession(); });
+document.getElementById('inp-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase(); });
+</script>
+</body>
+</html>

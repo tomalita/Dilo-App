@@ -165,7 +165,11 @@ function findClosestCallRecord(callRecordMap, normalizedUrl, eventStartISO) {
 
 // ── Get attendance detail from a callRecord ───────────────────────────────────
 // Uses sessions (one per participant) to extract who was in the call + duration.
-async function getAttendanceFromCallRecord(token, callRecordId) {
+// skipCoachFilter=true → include coaches (used for admin class-history view).
+// Processes BOTH session.caller AND session.callee — external/anonymous participants
+// (e.g. students who join via Teams link without a Microsoft account) appear as
+// the callee in their session rather than the caller.
+async function getAttendanceFromCallRecord(token, callRecordId, skipCoachFilter = false) {
   try {
     const detail = await gGet(token,
       `v1.0/communications/callRecords/${callRecordId}?$expand=sessions`
@@ -173,39 +177,59 @@ async function getAttendanceFromCallRecord(token, callRecordId) {
 
     const participants = new Map();
 
-    for (const session of (detail.sessions || [])) {
-      // associatedIdentity has email (UPN); identity.user for internal; identity.guest for external
-      const assoc   = session.caller?.associatedIdentity;
-      const idUser  = session.caller?.identity?.user;
-      const idGuest = session.caller?.identity?.guest; // external / anonymous users
+    // Process one endpoint (caller or callee) from a session.
+    function processEndpoint(endpoint, sessionStart, sessionEnd) {
+      if (!endpoint) return;
+      // identity.user = internal Microsoft 365 account
+      // identity.guest = external AAD guest account
+      // identity.anonimized = anonymous / link-only joiners (no Microsoft account)
+      const assoc   = endpoint.associatedIdentity;
+      const idUser  = endpoint.identity?.user;
+      const idGuest = endpoint.identity?.guest;
+      const idAnon  = endpoint.identity?.anonimized;
 
-      const uid   = assoc?.id    || idUser?.id    || idGuest?.id;
-      const name  = assoc?.displayName || idUser?.displayName || idGuest?.displayName;
-      const email = (assoc?.userPrincipalName || "").toLowerCase();
+      const uid   = assoc?.id   || idUser?.id   || idGuest?.id   || idAnon?.id;
+      const name  = assoc?.displayName
+                 || idUser?.displayName
+                 || idGuest?.displayName
+                 || idAnon?.displayName;
+      const email = (
+        assoc?.userPrincipalName
+        || idUser?.userPrincipalName
+        || idGuest?.userPrincipalName
+        || ""
+      ).toLowerCase();
 
-      // Skip if no identity or looks like a service endpoint
-      if (!uid || !name) continue;
-      // Skip coaches
-      if (COACH_EMAILS.has(email)) continue;
+      // Skip infrastructure / service endpoints with no real identity
+      if (!uid || !name) return;
+      // Skip coaches unless caller explicitly opted in (admin views)
+      if (!skipCoachFilter && COACH_EMAILS.has(email)) return;
 
       const isExternal = email === "" || !email.endsWith("@dilo.club");
 
-      const secs = (session.startDateTime && session.endDateTime)
-        ? Math.round((new Date(session.endDateTime) - new Date(session.startDateTime)) / 1000)
+      const secs = (sessionStart && sessionEnd)
+        ? Math.round((new Date(sessionEnd) - new Date(sessionStart)) / 1000)
         : 0;
 
       if (!participants.has(uid)) {
         participants.set(uid, {
           name, email, isExternal, secs,
-          firstJoin:  session.startDateTime,
-          lastLeave:  session.endDateTime,
+          firstJoin: sessionStart,
+          lastLeave: sessionEnd,
         });
       } else {
         const p = participants.get(uid);
         p.secs += secs;
-        if (session.startDateTime < p.firstJoin) p.firstJoin = session.startDateTime;
-        if (session.endDateTime   > p.lastLeave) p.lastLeave = session.endDateTime;
+        if (sessionStart && sessionStart < p.firstJoin) p.firstJoin = sessionStart;
+        if (sessionEnd   && sessionEnd   > p.lastLeave) p.lastLeave = sessionEnd;
       }
+    }
+
+    for (const session of (detail.sessions || [])) {
+      // Must process BOTH endpoints — external participants appear as callee,
+      // not caller, when they join via a Teams meeting link without an AAD account.
+      processEndpoint(session.caller, session.startDateTime, session.endDateTime);
+      processEndpoint(session.callee, session.startDateTime, session.endDateTime);
     }
 
     return {
@@ -224,6 +248,156 @@ async function getAttendanceFromCallRecord(token, callRecordId) {
     };
   } catch (e) {
     console.log(`[callRecord] err ${callRecordId?.slice(0, 8)}: ${e.message.slice(0, 80)}`);
+    return null;
+  }
+}
+
+// ── Resolve onlineMeeting.id directly from a calendar event (beta endpoint) ──
+// For recurring meetings, calendarView returns occurrences — the beta endpoint
+// only works on the MASTER event. We try the occurrence first, then the master.
+async function resolveMeetingIdFromEvent(token, eventId, seriesMasterId = null) {
+  const tryIds = [...new Set([eventId, seriesMasterId].filter(Boolean))];
+  for (const eid of tryIds) {
+    try {
+      const mtg = await gGet(token, `beta/users/${USER_ID}/events/${eid}/onlineMeeting`);
+      if (mtg?.id) {
+        console.log(`[resolveMeetingIdFromEvent] ${eid.slice(-8)} → ${mtg.id.slice(0, 20)}…`);
+        return { id: mtg.id, userId: USER_ID };
+      }
+      console.log(`[resolveMeetingIdFromEvent] no id for ${eid.slice(-8)} (keys: ${Object.keys(mtg || {}).join(",")})`);
+    } catch (e) {
+      console.log(`[resolveMeetingIdFromEvent] err ${eid.slice(-8)}: ${e.message.slice(0, 80)}`);
+    }
+  }
+  return null;
+}
+
+// ── Resolve onlineMeeting.id from a Teams join URL ───────────────────────────
+// Requires OnlineMeetings.Read.All permission.
+// The onlineMeeting resource belongs to the meeting ORGANIZER, not necessarily
+// to info@dilo.club. So we try info@dilo.club first, then any extraUserIds passed
+// (e.g. the calendar event organizer). Returns { id, userId } or null.
+async function resolveMeetingId(token, joinUrl, cache, extraUserIds = []) {
+  if (!joinUrl) return null;
+  const baseUrl = decodeURIComponent(joinUrl.split("?")[0]);
+  if (cache.has(baseUrl)) return cache.get(baseUrl);
+
+  const tryUsers = [...new Set([USER_ID, ...extraUserIds.filter(Boolean)])];
+  const filter   = encodeURIComponent(`joinWebUrl eq '${baseUrl}'`);
+
+  for (const uid of tryUsers) {
+    try {
+      const res = await gGet(token,
+        `v1.0/users/${uid}/onlineMeetings?$filter=${filter}&$select=id`
+      );
+      const id = res.value?.[0]?.id || null;
+      if (id) {
+        const result = { id, userId: uid };
+        console.log(`[resolveMeetingId] found under ${uid}: ${id.slice(0, 20)}…`);
+        cache.set(baseUrl, result);
+        return result;
+      }
+      console.log(`[resolveMeetingId] not found under ${uid}`);
+    } catch (e) {
+      console.log(`[resolveMeetingId] err for ${uid}: ${e.message.slice(0, 60)}`);
+    }
+  }
+
+  console.log(`[resolveMeetingId] not found for ${baseUrl.slice(0, 60)}`);
+  cache.set(baseUrl, null);
+  return null;
+}
+
+// ── Get attendance from Online Meeting Attendance Reports API ─────────────────
+// Requires OnlineMeetingArtifact.Read.All permission.
+// This API captures ALL participants including external users who join via a Teams
+// link without a Microsoft 365 account — unlike callRecords sessions which only
+// returns internal tenant users.
+// meetingId   = onlineMeeting resource id (not the calendar event id)
+// meetingUser = the user who OWNS the onlineMeeting resource (the organizer)
+// eventStartISO = used to find the right occurrence report for recurring meetings
+async function getAttendanceFromOnlineMeeting(token, meetingId, meetingUser, eventStartISO, skipCoachFilter = false) {
+  try {
+    const ownerUid = meetingUser || USER_ID;
+    const encId = encodeURIComponent(meetingId);
+
+    // 1. List attendance reports for this meeting
+    const reportsRes = await gGet(token,
+      `v1.0/users/${ownerUid}/onlineMeetings/${encId}/attendanceReports` +
+      `?$select=id,meetingStartDateTime,meetingEndDateTime,totalParticipantCount`
+    );
+    const reports = reportsRes.value || [];
+    if (!reports.length) {
+      console.log(`[onlineMtg] no attendance reports for ${meetingId.slice(0, 20)}`);
+      return null;
+    }
+
+    // 2. Find report closest in time to the event occurrence
+    let target = reports[0];
+    if (reports.length > 1 && eventStartISO) {
+      const evTime = new Date(eventStartISO).getTime();
+      let bestDiff = Infinity;
+      for (const r of reports) {
+        const diff = Math.abs(new Date(r.meetingStartDateTime).getTime() - evTime);
+        if (diff < bestDiff) { bestDiff = diff; target = r; }
+      }
+    }
+    console.log(`[onlineMtg] report ${target.id.slice(0, 20)} start=${target.meetingStartDateTime} n=${target.totalParticipantCount}`);
+
+    // 3. Fetch attendance records
+    const encRpt = encodeURIComponent(target.id);
+    const recRes = await gGet(token,
+      `v1.0/users/${ownerUid}/onlineMeetings/${encId}/attendanceReports/${encRpt}/attendanceRecords`
+    );
+    const rawRecords = recRes.value || [];
+    console.log(`[onlineMtg] raw records: ${rawRecords.length}`);
+
+    // 4. Map to participants
+    const participants = new Map();
+    for (const rec of rawRecords) {
+      const uid   = rec.identity?.user?.id || rec.identity?.guest?.id || rec.id;
+      const name  = rec.identity?.user?.displayName
+                 || rec.identity?.guest?.displayName
+                 || rec.emailAddress
+                 || "Unknown";
+      const email = (rec.emailAddress || "").toLowerCase();
+
+      if (!uid) continue;
+      if (!skipCoachFilter && COACH_EMAILS.has(email)) continue;
+
+      const isExternal = email === "" || !email.endsWith("@dilo.club");
+      const secs       = rec.totalAttendanceInSeconds || 0;
+
+      // firstJoin / lastLeave from attendanceIntervals
+      let firstJoin = target.meetingStartDateTime;
+      let lastLeave = target.meetingEndDateTime;
+      if (rec.attendanceIntervals?.length) {
+        const sorted = [...rec.attendanceIntervals].sort(
+          (a, b) => new Date(a.joinDateTime) - new Date(b.joinDateTime)
+        );
+        firstJoin = sorted[0].joinDateTime;
+        lastLeave = sorted[sorted.length - 1].leaveDateTime;
+      }
+
+      participants.set(uid, { name, email, isExternal, secs, firstJoin, lastLeave });
+    }
+
+    return {
+      reportId:          target.id,
+      totalParticipants: participants.size,
+      startDateTime:     target.meetingStartDateTime,
+      endDateTime:       target.meetingEndDateTime,
+      records: [...participants.values()].map(p => ({
+        name:       p.name,
+        email:      p.email,
+        isExternal: p.isExternal,
+        duration:   p.secs,
+        firstJoin:  p.firstJoin,
+        lastLeave:  p.lastLeave,
+      })),
+    };
+  } catch (e) {
+    console.log(`[onlineMtg] err ${meetingId?.slice(0, 16)}: ${e.message.slice(0, 100)}`);
     return null;
   }
 }
@@ -430,11 +604,11 @@ serve(async (req) => {
         : `${year}-12-31T23:59:59`;
       const nowISO  = new Date().toISOString();
 
-      // 1. Fetch all events in range
+      // 1. Fetch all events in range (include seriesMasterId + organizer)
       const evRes = await gGet(token,
         `v1.0/users/${USER_ID}/calendarView` +
         `?startDateTime=${startDT}&endDateTime=${endDT}` +
-        `&$select=id,subject,start,end,onlineMeeting,onlineMeetingUrl&$top=500`
+        `&$select=id,subject,start,end,organizer,seriesMasterId,onlineMeeting,onlineMeetingUrl&$top=500`
       );
       const allEvents = evRes.value || [];
 
@@ -445,22 +619,31 @@ serve(async (req) => {
       );
       console.log(`[class-history] "${subject}" → ${matching.length} past sessions`);
 
-      // 3. Fetch callRecords for the whole period
+      // 3. Pre-fetch callRecords as fallback (for events where the attendance
+      //    reports API fails — older meetings outside the 60-day report retention).
       const callStartISO = month
         ? `${year}-${mm}-01T00:00:00Z`
         : `${year}-01-01T00:00:00Z`;
       const callEndISO   = month
         ? `${year}-${mm}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}T23:59:59Z`
         : `${year}-12-31T23:59:59Z`;
-      const callRecs = await getAllCallRecords(token, callStartISO, callEndISO);
-      const callMap  = buildCallRecordMap(callRecs);
+      const callRecsResult = await Promise.allSettled([
+        getAllCallRecords(token, callStartISO, callEndISO),
+      ]);
+      const callMap = buildCallRecordMap(
+        callRecsResult[0].status === "fulfilled" ? callRecsResult[0].value : []
+      );
 
-      // 4. For each matching event, get attendance from callRecord
-      // calendarView doesn't return onlineMeeting.joinUrl for recurring occurrences —
-      // fall back to an individual event fetch if needed.
+      // meetingId cache — one entry per joinWebUrl base (recurring meetings share it)
+      const meetingIdCache = new Map();
+
+      // 4. For each matching event, get attendance.
+      //    Primary: Online Meeting Attendance Reports API (captures external users).
+      //    Fallback: callRecords sessions (internal M365 users only).
       const results = await batchedAllSettled(
         matching,
         async ev => {
+          // Resolve joinUrl (calendarView omits it for recurring occurrences)
           let joinUrl = ev.onlineMeeting?.joinUrl || ev.onlineMeetingUrl || null;
           if (!joinUrl) {
             try {
@@ -472,20 +655,41 @@ serve(async (req) => {
               console.log(`[class-history] event fetch err ${ev.id.slice(-8)}: ${e.message.slice(0, 60)}`);
             }
           }
+
+          // Primary path: Online Meeting Attendance Reports
+          // Try 1: beta event→onlineMeeting (direct, no URL matching needed)
+          // Try 2: joinWebUrl $filter (fallback if beta endpoint fails)
+          let resolved = await resolveMeetingIdFromEvent(token, ev.id, ev.seriesMasterId || null);
+          if (!resolved && joinUrl) {
+            const organizerEmail = ev.organizer?.emailAddress?.address || null;
+            resolved = await resolveMeetingId(token, joinUrl, meetingIdCache,
+              organizerEmail ? [organizerEmail] : []
+            );
+          }
+          if (resolved) {
+            const att = await getAttendanceFromOnlineMeeting(
+              token, resolved.id, resolved.userId, ev.start?.dateTime,
+              true /* skipCoachFilter — admin sees all */
+            );
+            if (att) return { date: ev.start.dateTime, eventId: ev.id, records: att.records };
+          }
+
+          // Fallback: callRecords (only internal M365 users, but better than empty)
+          console.log(`[class-history] using callRecord fallback for ${ev.start.dateTime}`);
           const key      = normalizeJoinUrl(joinUrl);
           const recordId = findClosestCallRecord(callMap, key, ev.start?.dateTime);
           if (!recordId) {
-            console.log(`[class-history] no callRecord for ${ev.start.dateTime} key=${key?.slice(0, 60) || "null"}`);
+            console.log(`[class-history] no data at all for ${ev.start.dateTime}`);
             return { date: ev.start.dateTime, eventId: ev.id, records: [] };
           }
-          const att = await getAttendanceFromCallRecord(token, recordId);
+          const attFb = await getAttendanceFromCallRecord(token, recordId, true);
           return {
             date:    ev.start.dateTime,
             eventId: ev.id,
-            records: att?.records || [],
+            records: attFb?.records || [],
           };
         },
-        4, 800  // smaller batch — each item may do 2 Graph calls
+        4, 800  // each item may do up to 3 Graph calls
       );
 
       const sessions = results
@@ -744,6 +948,156 @@ serve(async (req) => {
         .join("\n").trim();
 
       return jsonResp({ debug, vttName, transcript: plainText, rawVtt: vttText });
+    }
+
+    // ── Debug: test attendance reports API for a specific class + date ──────────
+    // { source: "test-attendance-reports", subject: "B1 - Your English Class Marco", date: "2026-06-04" }
+    if (source === "test-attendance-reports") {
+      const testDate = body.date || new Date().toISOString().slice(0, 10);
+      const testSubj = body.subject || subject;
+      const debug    = [];
+
+      // 1. Find the calendar event
+      debug.push(`looking for "${testSubj}" on ${testDate}`);
+      const dayStart = `${testDate}T00:00:00`;
+      const dayEnd   = `${testDate}T23:59:59`;
+      const evRes    = await gGet(token,
+        `v1.0/users/${USER_ID}/calendarView` +
+        `?startDateTime=${dayStart}&endDateTime=${dayEnd}` +
+        `&$select=id,subject,start,end,organizer,onlineMeeting,onlineMeetingUrl&$top=50`
+      );
+      const events   = evRes.value || [];
+      debug.push(`events on ${testDate}: ${events.length} → ${events.map(e => e.subject).join(" | ")}`);
+
+      const ev = events.find(e => e.subject === testSubj)
+              || events.find(e => (e.subject || "").toLowerCase().includes((testSubj || "").toLowerCase()));
+      if (!ev) {
+        return jsonResp({ debug, error: `No event found matching "${testSubj}"` }, 404);
+      }
+      debug.push(`matched: "${ev.subject}" start=${ev.start?.dateTime}`);
+
+      // 2. Get joinUrl
+      let joinUrl = ev.onlineMeeting?.joinUrl || ev.onlineMeetingUrl || null;
+      if (!joinUrl) {
+        const detail = await gGet(token,
+          `v1.0/users/${USER_ID}/events/${ev.id}?$select=onlineMeeting,onlineMeetingUrl`
+        );
+        joinUrl = detail?.onlineMeeting?.joinUrl || detail?.onlineMeetingUrl || null;
+      }
+      const baseUrl = joinUrl ? decodeURIComponent(joinUrl.split("?")[0]) : null;
+      debug.push(`joinUrl base: ${baseUrl?.slice(0, 80) || "null"}`);
+
+      const organizerEmail = ev.organizer?.emailAddress?.address || null;
+      debug.push(`organizer: ${organizerEmail || "null"}`);
+
+      // 3a. Try beta event→onlineMeeting (direct, no URL matching)
+      // For recurring meetings, try both occurrence eventId AND seriesMasterId
+      let foundMeetingId = null, foundUserId = null;
+      const fullEv = await gGet(token,
+        `v1.0/users/${USER_ID}/events/${ev.id}?$select=id,seriesMasterId,type`
+      ).catch(() => ({}));
+      debug.push(`event type=${fullEv.type || "?"} seriesMasterId=${fullEv.seriesMasterId?.slice(-8) || "none"}`);
+
+      const tryEventIds = [...new Set([ev.id, fullEv.seriesMasterId].filter(Boolean))];
+      for (const eid of tryEventIds) {
+        try {
+          const betaMtg = await gGet(token, `beta/users/${USER_ID}/events/${eid}/onlineMeeting`);
+          debug.push(`beta event(${eid.slice(-8)})→onlineMeeting: keys=${Object.keys(betaMtg || {}).join(",") || "empty"}`);
+          if (betaMtg?.id) {
+            foundMeetingId = betaMtg.id;
+            foundUserId    = USER_ID;
+            debug.push(`  ✓ id=${betaMtg.id.slice(0, 30)}…`);
+            break;
+          }
+        } catch (e) {
+          debug.push(`beta event(${eid.slice(-8)})→onlineMeeting: error — ${e.message.slice(0, 80)}`);
+        }
+      }
+
+      // 3b. Fallback: joinWebUrl $filter
+      if (!foundMeetingId) {
+        debug.push(`falling back to joinWebUrl $filter…`);
+        const tryUsers = [...new Set([USER_ID, organizerEmail].filter(Boolean))];
+        const filter   = baseUrl ? encodeURIComponent(`joinWebUrl eq '${baseUrl}'`) : null;
+        for (const uid of tryUsers) {
+          try {
+            const r = await gGet(token,
+              `v1.0/users/${uid}/onlineMeetings?$filter=${filter}&$select=id`
+            );
+            debug.push(`  ${uid}: ${r.value?.length ?? 0} meeting(s) found`);
+            if (r.value?.[0]?.id) { foundMeetingId = r.value[0].id; foundUserId = uid; break; }
+          } catch (e) {
+            debug.push(`  ${uid}: error — ${e.message.slice(0, 80)}`);
+          }
+        }
+      }
+
+      if (!foundMeetingId) {
+        return jsonResp({ debug, error: "Could not resolve onlineMeeting.id for any user" });
+      }
+      debug.push(`resolved meetingId under ${foundUserId}: ${foundMeetingId.slice(0, 40)}…`);
+
+      // 4. List attendance reports
+      const encId = encodeURIComponent(foundMeetingId);
+      const rpts  = await gGet(token,
+        `v1.0/users/${foundUserId}/onlineMeetings/${encId}/attendanceReports` +
+        `?$select=id,meetingStartDateTime,meetingEndDateTime,totalParticipantCount`
+      );
+      const reports = rpts.value || [];
+      debug.push(`attendance reports: ${reports.length}`);
+      reports.forEach(r => debug.push(`  ${r.meetingStartDateTime} → ${r.totalParticipantCount} participants`));
+
+      // 5. Pick closest report + fetch records
+      const evTime = new Date(ev.start.dateTime).getTime();
+      let target   = reports[0];
+      for (const r of reports) {
+        if (Math.abs(new Date(r.meetingStartDateTime).getTime() - evTime) <
+            Math.abs(new Date(target.meetingStartDateTime).getTime() - evTime)) target = r;
+      }
+      if (!target) return jsonResp({ debug, error: "No attendance reports found" });
+
+      const encRpt  = encodeURIComponent(target.id);
+      const recRes  = await gGet(token,
+        `v1.0/users/${foundUserId}/onlineMeetings/${encId}/attendanceReports/${encRpt}/attendanceRecords`
+      );
+      const records = recRes.value || [];
+      debug.push(`records for ${target.meetingStartDateTime}: ${records.length}`);
+      records.forEach(r => debug.push(
+        `  ${r.emailAddress || "no-email"} | ${r.identity?.user?.displayName || r.identity?.guest?.displayName || "?"} | ${r.totalAttendanceInSeconds}s`
+      ));
+
+      return jsonResp({ debug, reportDate: target.meetingStartDateTime, records });
+    }
+
+    // ── Calendar events for a specific date (Meeting Recaps dropdown) ──────────
+    // { source: "calendar-events", date: "2026-06-09" }
+    if (source === "calendar-events") {
+      const date = body.date || new Date().toISOString().slice(0, 10);
+      // Costa Rica = UTC-6 (no DST). CR midnight = UTC 06:00, CR 23:59 = UTC next-day 05:59.
+      // Span the query across the equivalent UTC window so evening classes are included.
+      const [yr, mo, dy] = date.split("-").map(Number);
+      const nextDay  = new Date(Date.UTC(yr, mo - 1, dy + 1)).toISOString().slice(0, 10);
+      const dayStart = `${date}T06:00:00`;
+      const dayEnd   = `${nextDay}T05:59:59`;
+      const url = `${GRAPH}/v1.0/users/${USER_ID}/calendarView` +
+        `?startDateTime=${dayStart}&endDateTime=${dayEnd}` +
+        `&$select=id,subject,start,end&$top=50&$orderby=start/dateTime`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: "Bearer " + token,
+          Prefer: 'outlook.timezone="America/Costa_Rica"',
+        },
+      });
+      const data = await res.json();
+      const events = ((data.value || []) as any[])
+        .filter((e: any) => e.subject)
+        .map((e: any) => ({
+          id:      e.id,
+          subject: e.subject,
+          start:   e.start?.dateTime || null,   // now in CR local time
+          end:     e.end?.dateTime   || null,
+        }));
+      return jsonResp({ events });
     }
 
     return jsonResp({ error: `Unknown source: ${source}` }, 400);

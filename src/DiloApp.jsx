@@ -96,6 +96,9 @@ const Icon = ({ name, size = 16, color = C.text2 }) => {
     plus:      <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>,
     send:      <><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>,
     invite:    <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+    recap:     <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
+    whatsapp:  <><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></>,
+    slides:    <><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></>,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -149,25 +152,30 @@ const NAV = {
     { id: "dilo-student", label: "Dilo Student",  icon: "agent" },
   ],
   coach: [
-    { id: "dashboard",    label: "Dashboard",     icon: "home" },
-    { id: "calendario",   label: "Calendar",      icon: "calendar" },
-    { id: "my-hours",     label: "My Hours",      icon: "metrics" },
-    { id: "feedbacks",    label: "FeedbackHub",   icon: "book" },
-    { id: "tps",          label: "TPS",           icon: "practice" },
-    { id: "dilo-coach",   label: "Dilo Coach",    icon: "agent" },
+    { id: "dashboard",       label: "Dashboard",       icon: "home" },
+    { id: "calendario",      label: "Calendar",        icon: "calendar" },
+    { id: "next-classes",    label: "Next Classes",    icon: "schedule" },
+    { id: "my-hours",        label: "My Hours",        icon: "metrics" },
+    { id: "feedbacks",       label: "FeedbackHub",     icon: "book" },
+    { id: "class-recaps",  label: "Class Recaps",  icon: "recap" },
+    { id: "dinamicas",     label: "Dynamic Class",   icon: "slides" },
   ],
   admin: [
-    { id: "dashboard",    label: "Dashboard",     icon: "home" },
-    { id: "calendario",   label: "Calendar",      icon: "calendar" },
-    { id: "estudiantes",  label: "Attendance",    icon: "users" },
-    { id: "coaches",      label: "Coaches",       icon: "coach" },
-    { id: "students",     label: "Students",      icon: "payment" },
-    { id: "feedbacks",    label: "FeedbackHub",   icon: "book" },
-    { id: "tps",          label: "TPS",           icon: "practice" },
-    { id: "invites",      label: "Invitations",   icon: "invite" },
-    { id: "metricas",     label: "Metrics",       icon: "metrics" },
-    { id: "dilo-coach",   label: "Dilo Coach",    icon: "agent" },
-    { id: "dilo-student", label: "Dilo Student",  icon: "agent" },
+    { id: "dashboard",       label: "Dashboard",       icon: "home" },
+    { id: "calendario",      label: "Calendar",        icon: "calendar" },
+    { id: "next-classes",    label: "Next Classes",    icon: "schedule" },
+    { id: "estudiantes",     label: "Attendance",      icon: "users" },
+    { id: "coaches",         label: "Coaches",         icon: "coach" },
+    { id: "students",        label: "Students",        icon: "payment" },
+    { id: "feedbacks",       label: "FeedbackHub",     icon: "book" },
+    { id: "class-recaps",    label: "Class Recaps",    icon: "recap" },
+    { id: "whatsapp",        label: "WhatsApp",        icon: "whatsapp" },
+    { id: "dinamicas",     label: "Dynamic Class",   icon: "slides" },
+    { id: "tps",             label: "TPS",             icon: "practice" },
+    { id: "invites",         label: "Invitations",     icon: "invite" },
+    { id: "metricas",        label: "Metrics",         icon: "metrics" },
+    { id: "dilo-coach",      label: "Dilo Coach",      icon: "agent" },
+    { id: "dilo-student",    label: "Dilo Student",    icon: "agent" },
   ],
 };
 
@@ -238,9 +246,10 @@ function StudentDashboard() {
 
 // COACH DASHBOARD
 function CoachDashboard({ user }) {
-  const [weekOffset,     setWeekOffset]     = useState(0);
-  const [weekCache,      setWeekCache]      = useState({});  // offset → events[]
-  const [weekLoading,    setWeekLoading]    = useState(true);
+  const [weekOffset,      setWeekOffset]      = useState(0);
+  const [weekCache,       setWeekCache]       = useState({});  // offset → events[]
+  const [weekLoading,     setWeekLoading]     = useState(true);
+  const [rankMonthOffset, setRankMonthOffset] = useState(0);
   const [monthEvents,    setMonthEvents]    = useState([]);
   const [classFeedbacks, setClassFeedbacks] = useState([]);
   const [allSurveys,     setAllSurveys]     = useState([]);
@@ -376,9 +385,26 @@ function CoachDashboard({ user }) {
   const missingFbs = getMissingFbs(myClasses);
   const missingMonthFbs = getMissingFbs(myMonthClasses);
 
-  // Ranking
+  // Ranking — month-filtered
+  const getRankMonthBounds = (offset) => {
+    const n = new Date();
+    const start = new Date(n.getFullYear(), n.getMonth() + offset, 1);
+    const end   = new Date(n.getFullYear(), n.getMonth() + offset + 1, 0, 23, 59, 59);
+    return { start, end };
+  };
+  const { start: rankStart, end: rankEnd } = getRankMonthBounds(rankMonthOffset);
+  const rankMonthLabel = rankStart.toLocaleDateString("en", { month: "long", year: "numeric" });
+
   const getRating = (coach) => {
-    const surveys = allSurveys.filter(s => s.coach === coach);
+    const surveys = allSurveys.filter(s => {
+      if (s.coach !== coach) return false;
+      if (!s.fecha) return true;
+      const raw = s.fecha.split(",")[0].trim();
+      const [d, m, y] = raw.split("/");
+      if (!y) return true;
+      const dt = new Date(+y, +m - 1, +d);
+      return dt >= rankStart && dt <= rankEnd;
+    });
     if (!surveys.length) return 0;
     const fields = ["practica","sentimiento","gramatica"];
     let sum = 0, count = 0;
@@ -458,15 +484,23 @@ function CoachDashboard({ user }) {
 
     // Walk most-recent → oldest; stop at the first event that has notes.
     //
-    // Zero-error cross-check:
-    //   col B (coach)      = past Teams event's coach         — not the current coach
-    //   col C (hora_clase) = past Teams event's hour:minute   — disambiguates same-day classes
-    //   col A (fecha date) = within [ev.date, ev.date + 2d]  — col A is SUBMISSION timestamp,
-    //                        coaches may submit same day or up to 2 days after the class
+    // Cross-check rules (100% precision):
+    //   1. Student overlap: skip past events with completely different students.
+    //   2. Dropped-student filter: exclude notes for students who left the class.
+    const toTk = s => s.trim().split('@')[0].split(/[\s_]/)[0].toLowerCase().replace(/\d/g,'');
+    const getTkSet = str => new Set((str||'').split(/[,;&\/]/).map(toTk).filter(t=>t.length>=3));
+    const currentTks = getTkSet(nextClass.estudiantes);
+
     for (const ev of candidates) {
+      // Rule 1: skip if students are completely different
+      const pastTks = getTkSet(ev.estudiantes);
+      if (currentTks.size > 0 && pastTks.size > 0) {
+        const ok = [...currentTks].some(ct => [...pastTks].some(pt => ct===pt||ct.startsWith(pt)||pt.startsWith(ct)));
+        if (!ok) continue;
+      }
+
       const evDay    = new Date(ev.date); evDay.setHours(0, 0, 0, 0);
       const evDayEnd = new Date(evDay);   evDayEnd.setDate(evDay.getDate() + 2);
-
       const evH  = ev.date.getHours();
       const evM  = ev.date.getMinutes();
       const ampm = evH >= 12 ? "PM" : "AM";
@@ -479,7 +513,20 @@ function CoachDashboard({ user }) {
         r.coach.split(" ")[0] === ev.coach &&
         (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase()
       );
-      if (notes.length > 0) { prevFeedback = notes; break; }
+      if (notes.length === 0) continue;
+
+      // Rule 2: filter out notes for students who dropped from the class
+      const droppedTks = [...pastTks].filter(pt =>
+        !([...currentTks].some(ct => ct===pt||ct.startsWith(pt)||pt.startsWith(ct)))
+      );
+      const filtered = droppedTks.length > 0
+        ? notes.filter(r => {
+            const nt = (r.estudiante_nombre||"").split(" ")[0].toLowerCase();
+            return !droppedTks.some(d => nt===d||nt.startsWith(d)||d.startsWith(nt));
+          })
+        : notes;
+
+      if (filtered.length > 0) { prevFeedback = filtered; break; }
     }
   }
 
@@ -544,22 +591,37 @@ function CoachDashboard({ user }) {
       )}
 
       {/* Ranking card */}
-      <div style={{ ...CARD, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:"1rem", display:"flex", alignItems:"center", gap:"1.5rem" }}>
-        <div style={{ textAlign:"center", minWidth:80, flexShrink:0 }}>
-          <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:C.text3, marginBottom:4 }}>Rank</p>
-          <p style={{ fontSize:"clamp(4rem,12vw,5.5rem)", fontWeight:900, letterSpacing:"-0.04em", color:C.text, lineHeight:1 }}>
-            #{loading ? "—" : myRank || "—"}
-          </p>
-          <p style={{ fontSize:11, color:C.text3, marginTop:2 }}>of {COACHES.length} coaches</p>
+      <div style={{ ...CARD, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:"1rem" }}>
+        {/* Month navigator */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
+          <button onClick={() => setRankMonthOffset(o => o - 1)}
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1 }}>‹</button>
+          <div style={{ textAlign:"center" }}>
+            <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color: rankMonthOffset === 0 ? C.green : C.text3, margin:0 }}>
+              {rankMonthOffset === 0 ? "This month" : rankMonthOffset === -1 ? "Last month" : rankMonthLabel}
+            </p>
+            <p style={{ fontSize:11, color:C.text3, margin:0 }}>{rankMonthLabel}</p>
+          </div>
+          <button onClick={() => setRankMonthOffset(o => Math.min(o + 1, 0))}
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color: rankMonthOffset === 0 ? C.border2 : C.text2, fontSize:18, cursor: rankMonthOffset === 0 ? "default" : "pointer", lineHeight:1 }}>›</button>
         </div>
-        <div style={{ width:1, height:70, background:C.border, flexShrink:0 }} />
-        <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:C.text3, marginBottom:8 }}>Student rating avg</p>
-          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ flex:1, height:6, borderRadius:3, background:"rgba(240,236,224,0.06)" }}>
-              <div style={{ height:"100%", width:`${(myRating/5)*100}%`, borderRadius:3, background: myRating >= 4 ? C.green : myRating >= 3 ? C.amber : C.text3, transition:"width 0.5s" }} />
+        <div style={{ display:"flex", alignItems:"center", gap:"1.5rem" }}>
+          <div style={{ textAlign:"center", minWidth:80, flexShrink:0 }}>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:C.text3, marginBottom:4 }}>Rank</p>
+            <p style={{ fontSize:"clamp(4rem,12vw,5.5rem)", fontWeight:900, letterSpacing:"-0.04em", color:C.text, lineHeight:1 }}>
+              #{loading ? "—" : myRank || "—"}
+            </p>
+            <p style={{ fontSize:11, color:C.text3, marginTop:2 }}>of {COACHES.length} coaches</p>
+          </div>
+          <div style={{ width:1, height:70, background:C.border, flexShrink:0 }} />
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:C.text3, marginBottom:8 }}>Student rating avg</p>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1, height:6, borderRadius:3, background:"rgba(240,236,224,0.06)" }}>
+                <div style={{ height:"100%", width:`${(myRating/5)*100}%`, borderRadius:3, background: myRating >= 4 ? C.green : myRating >= 3 ? C.amber : C.text3, transition:"width 0.5s" }} />
+              </div>
+              <span style={{ fontSize:18, fontWeight:700, color:C.text, minWidth:32 }}>{myRating ? myRating.toFixed(1) : "—"}</span>
             </div>
-            <span style={{ fontSize:18, fontWeight:700, color:C.text, minWidth:32 }}>{myRating ? myRating.toFixed(1) : "—"}</span>
           </div>
         </div>
       </div>
@@ -731,10 +793,11 @@ function AdminDashboard() {
   });
 
   const totals = {
-    classes:   teamsEvents.length,
-    classFb:   classFeedbacks.length,
-    studentFb: studentFeedbacks.length,
-    surveys:   surveys.length,
+    classes:    teamsEvents.length,
+    classFb:    classFeedbacks.length,
+    studentFb:  studentFeedbacks.length,
+    surveys:    surveys.length,
+    unassigned: teamsEvents.filter(ev => !COACHES.includes(ev.coach)).length,
   };
 
   const maxClasses = Math.max(...coachStats.map(c => c.classes), 1);
@@ -748,10 +811,10 @@ function AdminDashboard() {
       {/* Week navigator */}
       <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.5rem" }}>
         <button onClick={() => setWeekOffset(w => w - 1)}
-          style={{ background:C.surface2, border:`1px solid ${C.border2}`, borderRadius:8, padding:"0.4rem 0.75rem", color:C.text2, cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"inherit" }}>←</button>
+          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>‹</button>
         <span style={{ flex:1, textAlign:"center", fontSize:13, fontWeight:700, color:C.text }}>{weekLabel}</span>
         <button onClick={() => setWeekOffset(w => w + 1)}
-          style={{ background:C.surface2, border:`1px solid ${C.border2}`, borderRadius:8, padding:"0.4rem 0.75rem", color:C.text2, cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"inherit" }}>→</button>
+          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>›</button>
       </div>
 
       {/* Next Class banner */}
@@ -786,13 +849,15 @@ function AdminDashboard() {
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:"0.75rem", marginBottom:"1.5rem" }}>
         {[
           { label:"Classes", value: loading?"—":totals.classes, sub:"Teams calendar" },
+          { label:"Unassigned", value: loading?"—":totals.unassigned, sub:"No coach assigned",
+            accent: !loading ? (totals.unassigned === 0 ? C.green : C.red) : undefined },
           { label:"Class Feedbacks", value: loading?"—":totals.classFb, sub:"Sent by coaches" },
           { label:"Student Feedbacks", value: loading?"—":totals.studentFb, sub:"Individual notes" },
           { label:"Student Surveys", value: loading?"—":totals.surveys, sub:"Received from students" },
         ].map((s,i) => (
           <div key={i} style={{ ...CARD, borderRadius:16, padding:"1.25rem" }}>
             <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:C.text3, marginBottom:"0.6rem" }}>{s.label}</p>
-            <p style={{ fontSize:"clamp(1.8rem,6vw,2.6rem)", fontWeight:900, letterSpacing:"-0.04em", color:C.text, lineHeight:1 }}>{s.value}</p>
+            <p style={{ fontSize:"clamp(1.8rem,6vw,2.6rem)", fontWeight:900, letterSpacing:"-0.04em", color: s.accent || C.text, lineHeight:1 }}>{s.value}</p>
             <p style={{ fontSize:11, color:C.text3, marginTop:4 }}>{s.sub}</p>
           </div>
         ))}
@@ -812,7 +877,7 @@ function AdminDashboard() {
           <tbody>
             {loading ? (
               <tr><td colSpan={7} style={{ padding:"1.5rem" }}>
-                <div style={{ display:"flex", gap:6 }}>{[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div>
+                <div style={{ display:"flex", justifyContent:"center", gap:6 }}>{[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div>
               </td></tr>
             ) : coachStats.map((cs, i) => {
               const coachEvents = teamsEvents.filter(ev => ev.coach === cs.coach);
@@ -908,6 +973,7 @@ function AdminDashboard() {
 // FEEDBACKS HUB
 function FeedbacksHub({ setActive, role }) {
   const allCards = [
+    { id: "new-class-feedback", title: "New Class Feedback", desc: "Submit per-student scores across listening, grammar, reading and speaking.", send: true, notStudent: true },
     { id: "send-feedback",    title: "Class Feedback",    desc: "Submit your class feedback form.", send: true },
     { id: "class-feedback",   title: "Class Feedbacks Sent", desc: "Review your submitted class feedback.", coachOnly: true },
     { id: "class-feedback",   title: "Class Feedback",    desc: "Coach notes on each class performance.", adminOnly: true },
@@ -917,6 +983,7 @@ function FeedbacksHub({ setActive, role }) {
   const cards = allCards.filter(c => {
     if (c.adminOnly && role !== "admin") return false;
     if (c.coachOnly && role !== "coach") return false;
+    if (c.notStudent && role === "student") return false;
     return true;
   });
 
@@ -984,9 +1051,10 @@ const COACH_RATES = {
   Jesse:    { rate: 15,    currency: "$", iva: false },
 };
 
-const ANON_KEY       = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHlueHFhc2doYnVmcXpyZ2Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NzI1MDYsImV4cCI6MjA5NDA0ODUwNn0.Utn2e0DPRAlrzk8M5iKs0BS-UfVM6JIL3trH9PN0hKk";
-const EDGE_URL       = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/rapid-endpoint";
-const ATTENDANCE_URL = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/attendance-endpoint";
+const ANON_KEY        = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHlueHFhc2doYnVmcXpyZ2Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NzI1MDYsImV4cCI6MjA5NDA0ODUwNn0.Utn2e0DPRAlrzk8M5iKs0BS-UfVM6JIL3trH9PN0hKk";
+const EDGE_URL        = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/rapid-endpoint";
+const ATTENDANCE_URL  = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/attendance-endpoint";
+const WHATSAPP_URL    = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/whatsapp-sender";
 // Module-level caches — survive component unmount/remount (navigation between tabs)
 const _schedCache = {};     // weekOffset → events[]  (shared: Dashboard seeds, Schedule reads)
 let   _monthCache = null;   // coach month events      (shared: Dashboard seeds, Schedule reads)
@@ -1060,18 +1128,18 @@ const fbInput   = { width:"100%", background:"rgba(240,236,224,0.05)", border:"1
 const fbErr     = { fontSize:11, color:"#c20000", marginTop:"0.3rem" };
 const fbLine    = { height:1, background:"rgba(240,236,224,0.07)", margin:"1.25rem 0" };
 
-function FbScaleInput({ name, label, hint, value, onSelect, error }) {
+function FbScaleInput({ name, label, hint, value, onSelect, error, disabled }) {
   return (
-    <div style={{ marginBottom:"1.25rem" }}>
+    <div style={{ marginBottom:"1.25rem", opacity: disabled ? 0.3 : 1, transition:"opacity 0.2s", pointerEvents: disabled ? "none" : "auto" }}>
       <label style={fbLabel}>{label} <span style={{ color:"#c20000" }}>*</span></label>
       {hint && <p style={{ fontSize:11, color:"rgba(240,236,224,0.25)", marginBottom:"0.5rem", lineHeight:1.5 }}>{hint}</p>}
       <div style={{ display:"flex", gap:"0.35rem" }}>
         {[1,2,3,4,5].map(v => {
-          const active = value !== null && v <= value;
+          const active = !disabled && value !== null && v <= value;
           const bc = active ? (value <= 2 ? "#c20000" : value <= 4 ? "#ca9a04" : "#6DB58A") : "rgba(240,236,224,0.1)";
           return (
-            <button key={v} type="button" onClick={() => onSelect(name, v)}
-              style={{ flex:1, aspectRatio:"1", background:"rgba(240,236,224,0.04)", border:`1px solid ${bc}`, borderRadius:8, fontSize:14, fontWeight:active?600:400, color:active?"#f0ece0":"rgba(240,236,224,0.3)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", minHeight:44, fontFamily:"inherit", transition:"all 0.15s" }}>
+            <button key={v} type="button" onClick={() => !disabled && onSelect(name, v)}
+              style={{ flex:1, aspectRatio:"1", background:"rgba(240,236,224,0.04)", border:`1px solid ${bc}`, borderRadius:8, fontSize:14, fontWeight:active?600:400, color:active?"#f0ece0":"rgba(240,236,224,0.3)", cursor: disabled?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center", minHeight:44, fontFamily:"inherit", transition:"all 0.15s" }}>
               {v}
             </button>
           );
@@ -1479,6 +1547,415 @@ function SendFeedbackView({ user, setActive }) {
   );
 }
 
+// ── NEW CLASS FEEDBACK ────────────────────────────────────────
+
+const NCF_SCORES = [
+  { key:"listening",       label:"Listening Comprehension", hint:"How accurately did this student process and respond to spoken input without needing repetition?" },
+  { key:"grammar",         label:"Grammar Spontaneity",     hint:"How naturally did they use today's target structures without overthinking?" },
+  { key:"reading",         label:"Reading Engagement",      hint:"How well did this student interact with written material — understanding, inferring, and discussing the text?" },
+  { key:"oral_confidence", label:"Oral Confidence",         hint:"How confidently did this student engage verbally — initiating, responding, and sustaining ideas in English?" },
+  { key:"speaking_fluency",label:"Speaking Fluency",        hint:"How naturally and fluidly did this student express themselves without excessive pausing or switching to Spanish?" },
+  { key:"speaking_output", label:"Speaking Output",         hint:"How actively and clearly did this student contribute to the conversation in English?" },
+];
+
+function NewStudentCard({ idx, isOnly, data, onChange, onRemove, onToggleNoShow, hasReading, errors }) {
+  return (
+    <div style={{ background: data.noShow ? "rgba(194,0,0,0.05)" : "rgba(240,236,224,0.06)", backdropFilter:"blur(14px)", WebkitBackdropFilter:"blur(14px)", border: `1px solid ${data.noShow ? "rgba(194,0,0,0.25)" : "rgba(240,236,224,0.12)"}`, borderRadius:14, padding:"1.25rem", marginBottom:"0.75rem", transition:"background 0.2s, border-color 0.2s" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem" }}>
+        <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.18em", textTransform:"uppercase", color: data.noShow ? "#c20000" : C.green }}>
+          {isOnly ? "Student" : `Student ${idx+1}`}{data.noShow ? " — NO SHOW" : ""}
+        </span>
+        {!isOnly && (
+          <button type="button" onClick={onRemove}
+            style={{ background:"transparent", border:"1px solid rgba(240,236,224,0.07)", color:"rgba(240,236,224,0.3)", borderRadius:50, fontSize:11, fontWeight:600, padding:"0.35rem 0.75rem", cursor:"pointer", fontFamily:"inherit", transition:"all 0.15s" }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="#c20000";e.currentTarget.style.color="#c20000";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.07)";e.currentTarget.style.color="rgba(240,236,224,0.3)";}}>
+            Remove
+          </button>
+        )}
+      </div>
+
+      {/* Name */}
+      <div style={{ marginBottom:"0.75rem" }}>
+        <label style={fbLabel}>Student name <span style={{color:"#c20000"}}>*</span></label>
+        <input type="text" value={data.name} onChange={e => onChange(idx,"name",e.target.value)} placeholder="Full name..."
+          style={{ ...fbInput, borderColor: errors[`${idx}_name`] ? "#c20000" : "rgba(240,236,224,0.07)" }} />
+        {errors[`${idx}_name`] && <p style={fbErr}>Enter the name.</p>}
+      </div>
+
+      {/* No Show checkbox */}
+      <label style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.25rem", cursor: data.loadingPrev ? "wait" : "pointer", userSelect:"none" }}>
+        <input type="checkbox" checked={data.noShow} onChange={() => onToggleNoShow(idx)}
+          disabled={data.loadingPrev}
+          style={{ width:15, height:15, cursor:"inherit", accentColor:"#c20000", flexShrink:0 }} />
+        <span style={{ fontSize:12, fontWeight:600, color: data.noShow ? "#c20000" : "rgba(240,236,224,0.4)", transition:"color 0.15s" }}>
+          No Show
+        </span>
+        {data.loadingPrev && (
+          <span style={{ fontSize:11, color:"rgba(240,236,224,0.3)", fontStyle:"italic" }}>Loading previous notes…</span>
+        )}
+      </label>
+
+      {/* Scores — disabled when No Show */}
+      {NCF_SCORES.filter(s => s.key !== "reading" || hasReading).map(s => (
+        <FbScaleInput key={s.key} name={s.key} label={s.label} hint={s.hint}
+          value={data[s.key]} onSelect={(_, v) => onChange(idx, s.key, v)}
+          error={errors[`${idx}_${s.key}`]} disabled={data.noShow} />
+      ))}
+
+      <div style={fbLine} />
+
+      {/* Performance note */}
+      <div style={{ marginBottom:"1rem" }}>
+        <label style={fbLabel}>Performance note <span style={{color:"#c20000"}}>*</span></label>
+        <textarea value={data.performance_note} onChange={e => onChange(idx,"performance_note",e.target.value)}
+          placeholder={data.noShow ? "Auto-filled from previous session…" : "Describe their overall performance — what stood out, what struggled..."}
+          style={{ ...fbInput, resize:"none", minHeight:80, lineHeight:1.5, borderColor: errors[`${idx}_performance_note`] ? "#c20000" : "rgba(240,236,224,0.07)" }} />
+        {errors[`${idx}_performance_note`] && <p style={fbErr}>Add a note.</p>}
+      </div>
+
+      {/* Next step */}
+      <div>
+        <label style={fbLabel}>Next Step <span style={{color:"#c20000"}}>*</span></label>
+        <textarea value={data.next_step} onChange={e => onChange(idx,"next_step",e.target.value)}
+          placeholder={data.noShow ? "Auto-filled from previous session…" : "One specific, actionable thing to work on next session..."}
+          style={{ ...fbInput, resize:"none", minHeight:80, lineHeight:1.5, borderColor: errors[`${idx}_next_step`] ? "#c20000" : "rgba(240,236,224,0.07)" }} />
+        {errors[`${idx}_next_step`] && <p style={fbErr}>Add a next step.</p>}
+      </div>
+    </div>
+  );
+}
+
+function NewClassFeedbackView({ user, role, setActive }) {
+  const coachName = user?.nombre || "";
+  const [coach,      setCoach]     = useState(coachName);
+  const [classDate,  setClassDate] = useState(crToday);
+  const [classType,  setClassType] = useState("");
+  const [hasReading, setHasReading]= useState(false);
+  const [hora,       setHora]      = useState("");
+  const [tpOpen,     setTpOpen]    = useState(false);
+  const [tpH,        setTpH]       = useState(5);
+  const [tpM,        setTpM]       = useState(0);
+  const [tpAP,       setTpAP]      = useState(0);
+  const drumH  = useRef(null);
+  const drumM  = useRef(null);
+  const drumAP = useRef(null);
+  const timers = useRef({});
+
+  const emptyStudent = () => ({ name:"", listening:null, grammar:null, reading:null, oral_confidence:null, speaking_fluency:null, speaking_output:null, performance_note:"", next_step:"", noShow:false, loadingPrev:false });
+  const [students,   setStudents]  = useState([emptyStudent()]);
+  const [errors,     setErrors]    = useState({});
+  const [submitting, setSubmitting]= useState(false);
+  const [submitted,  setSubmitted] = useState(false);
+  const [submitErr,  setSubmitErr] = useState("");
+
+  useEffect(() => {
+    if (!document.getElementById("dilo-drum-css")) {
+      const s = document.createElement("style"); s.id = "dilo-drum-css";
+      s.textContent = ".fb-drum::-webkit-scrollbar{display:none}";
+      document.head.appendChild(s);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!tpOpen) return;
+    const t = setTimeout(() => {
+      if (drumH.current)  drumH.current.scrollTop  = tpH  * 44;
+      if (drumM.current)  drumM.current.scrollTop  = tpM  * 44;
+      if (drumAP.current) drumAP.current.scrollTop = tpAP * 44;
+    }, 50);
+    return () => clearTimeout(t);
+  }, [tpOpen]);
+
+  function handleDrumScroll(col) {
+    const ref   = col==="h" ? drumH   : col==="m" ? drumM   : drumAP;
+    const items = col==="h" ? FB_HOURS: col==="m" ? FB_MINS : FB_AMPM;
+    const set   = col==="h" ? setTpH  : col==="m" ? setTpM  : setTpAP;
+    clearTimeout(timers.current[col]);
+    timers.current[col] = setTimeout(() => {
+      if (!ref.current) return;
+      const idx = Math.max(0, Math.min(items.length-1, Math.round(ref.current.scrollTop/44)));
+      ref.current.scrollTo({ top:idx*44, behavior:"smooth" });
+      set(idx);
+    }, 80);
+  }
+
+  function snapDrum(col, idx) {
+    const ref = col==="h" ? drumH : col==="m" ? drumM : drumAP;
+    const set  = col==="h" ? setTpH : col==="m" ? setTpM : setTpAP;
+    if (ref.current) ref.current.scrollTo({ top:idx*44, behavior:"smooth" });
+    set(idx);
+  }
+
+  function confirmTime() {
+    setHora(FB_HOURS[tpH]+":"+FB_MINS[tpM]+" "+FB_AMPM[tpAP]);
+    setErrors(e => ({ ...e, hora:false }));
+    setTpOpen(false);
+  }
+
+  function updateStudent(idx, field, val) {
+    setStudents(a => a.map((s,i) => i===idx ? { ...s, [field]:val } : s));
+    setErrors(e => ({ ...e, [`${idx}_${field}`]:false }));
+  }
+
+  async function handleNoShowToggle(idx) {
+    const current = students[idx];
+    const newNoShow = !current.noShow;
+
+    // If unchecking, just remove no-show state (keep the auto-filled text for editing)
+    if (!newNoShow) {
+      setStudents(a => a.map((s,i) => i===idx ? { ...s, noShow:false, loadingPrev:false } : s));
+      return;
+    }
+
+    // Checking: set loadingPrev while we fetch previous session
+    setStudents(a => a.map((s,i) => i===idx ? { ...s, noShow:true, loadingPrev:true } : s));
+
+    try {
+      const studentName = current.name.trim();
+      let prevNote = "No feedback yet.";
+      let prevNext = "No feedback yet.";
+
+      if (studentName) {
+        // Find the most recent session record for this student (by name, case-insensitive)
+        const { data: rows } = await supabase
+          .from("class_session_students")
+          .select("performance_note, next_step, class_sessions(class_date)")
+          .ilike("student_name", studentName)
+          .not("performance_note", "is", null)
+          .order("id", { ascending: false })
+          .limit(1);
+
+        if (rows && rows.length > 0) {
+          const prev = rows[0];
+          const dateLabel = prev.class_sessions?.class_date
+            ? ` (${prev.class_sessions.class_date})`
+            : "";
+          prevNote = `[No Show — ref from previous session${dateLabel}] ${prev.performance_note || ""}`.trim();
+          prevNext = prev.next_step || "No feedback yet.";
+        } else {
+          prevNote = "[No Show — No feedback yet.]";
+          prevNext = "No feedback yet.";
+        }
+      } else {
+        prevNote = "[No Show — No feedback yet.]";
+        prevNext = "No feedback yet.";
+      }
+
+      setStudents(a => a.map((s,i) => i===idx
+        ? { ...s, noShow:true, loadingPrev:false, performance_note:prevNote, next_step:prevNext }
+        : s
+      ));
+    } catch(e) {
+      console.error("handleNoShowToggle error:", e);
+      setStudents(a => a.map((s,i) => i===idx
+        ? { ...s, noShow:true, loadingPrev:false, performance_note:"[No Show — No feedback yet.]", next_step:"No feedback yet." }
+        : s
+      ));
+    }
+  }
+
+  function validate() {
+    const errs = {};
+    if (!coach)     errs.coach     = true;
+    if (!classDate) errs.classDate = true;
+    if (!hora)      errs.hora      = true;
+    if (!classType) errs.classType = true;
+    students.forEach((s,i) => {
+      if (!s.name.trim())             errs[`${i}_name`]             = true;
+      if (!s.noShow) {
+        if (!s.listening)               errs[`${i}_listening`]        = true;
+        if (!s.grammar)                 errs[`${i}_grammar`]          = true;
+        if (hasReading && !s.reading)   errs[`${i}_reading`]          = true;
+        if (!s.oral_confidence)         errs[`${i}_oral_confidence`]  = true;
+        if (!s.speaking_fluency)        errs[`${i}_speaking_fluency`] = true;
+        if (!s.speaking_output)         errs[`${i}_speaking_output`]  = true;
+      }
+      if (!s.performance_note.trim()) errs[`${i}_performance_note`] = true;
+      if (!s.next_step.trim())        errs[`${i}_next_step`]        = true;
+    });
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
+
+  async function handleSubmit() {
+    if (!validate()) return;
+    setSubmitting(true);
+    setSubmitErr("");
+    try {
+      const { data: session, error: sessionErr } = await supabase
+        .from("class_sessions")
+        .insert({ coach, class_date: classDate, class_time: hora, class_type: classType, has_reading: hasReading, created_by: user?.id })
+        .select().single();
+      if (sessionErr) throw sessionErr;
+
+      const { error: studentsErr } = await supabase
+        .from("class_session_students")
+        .insert(students.map(s => ({
+          session_id:       session.id,
+          student_name:     s.name,
+          no_show:          s.noShow || false,
+          listening:        s.noShow ? null : s.listening,
+          grammar:          s.noShow ? null : s.grammar,
+          reading:          s.noShow ? null : (hasReading ? s.reading : null),
+          oral_confidence:  s.noShow ? null : s.oral_confidence,
+          speaking_fluency: s.noShow ? null : s.speaking_fluency,
+          speaking_output:  s.noShow ? null : s.speaking_output,
+          performance_note: s.performance_note,
+          next_step:        s.next_step,
+        })));
+      if (studentsErr) throw studentsErr;
+      setSubmitted(true);
+    } catch(e) {
+      setSubmitErr("Something went wrong. Please try again.");
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function resetForm() {
+    setCoach(coachName); setClassDate(crToday());
+    setClassType(""); setHasReading(false); setHora("");
+    setStudents([emptyStudent()]); setErrors({}); setSubmitted(false); setSubmitErr("");
+  }
+
+  const drumCol = { flex:1, overflowY:"scroll", scrollSnapType:"y mandatory", WebkitOverflowScrolling:"touch", scrollbarWidth:"none", padding:"88px 0", textAlign:"center" };
+
+  if (submitted) return (
+    <div style={{ maxWidth:560, width:"100%" }}>
+      <div style={{ marginBottom:"1.5rem" }}>
+        <BackBtn onClick={() => setActive("feedbacks")} />
+        <h2 style={{ fontSize:"clamp(1.6rem,4vw,2.2rem)", fontWeight:900, letterSpacing:"-0.03em", color:C.text }}>New Class Feedback</h2>
+      </div>
+      <div style={{ ...CARD, borderRadius:16, padding:"3rem 1.5rem", textAlign:"center" }}>
+        <div style={{ width:52, height:52, background:"rgba(109,181,138,0.12)", border:"1px solid rgba(109,181,138,0.3)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 1.25rem", fontSize:22 }}>✓</div>
+        <h2 style={{ fontSize:"1.5rem", fontWeight:900, letterSpacing:"-0.02em", color:C.text, marginBottom:"0.5rem" }}>Feedback submitted!</h2>
+        <p style={{ fontSize:13, color:C.text3, marginBottom:"2rem", lineHeight:1.6 }}>All student scores and notes have been saved.</p>
+        <div style={{ display:"flex", gap:"0.75rem", justifyContent:"center", flexWrap:"wrap" }}>
+          <button onClick={resetForm} style={{ background:C.green, border:"none", borderRadius:10, color:"#0d0b08", fontFamily:"inherit", fontSize:13, fontWeight:700, padding:"0.75rem 1.5rem", cursor:"pointer" }}>Submit another</button>
+          <button onClick={() => setActive("feedbacks")} style={{ background:"transparent", border:`1px solid ${C.border2}`, borderRadius:10, color:C.text2, fontFamily:"inherit", fontSize:13, fontWeight:600, padding:"0.75rem 1.5rem", cursor:"pointer" }}>Back to Hub</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth:560, width:"100%" }}>
+      <div style={{ marginBottom:"1.5rem" }}>
+        <BackBtn onClick={() => setActive("feedbacks")} />
+        <h2 style={{ fontSize:"clamp(1.6rem,4vw,2.2rem)", fontWeight:900, letterSpacing:"-0.03em", color:C.text, marginBottom:"0.4rem" }}>New Class Feedback</h2>
+        <p style={{ fontSize:13, color:C.text2, lineHeight:1.6 }}>Fill in the class details, then add scores and notes for each student.</p>
+      </div>
+
+      {/* ── Class Info ── */}
+      <div style={fbSection}>
+        <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:C.text3, marginBottom:"1rem" }}>Class Info</p>
+
+        {/* Coach */}
+        {role === "admin" && (
+          <div style={{ marginBottom:"1rem" }}>
+            <label style={fbLabel}>Coach <span style={{color:"#c20000"}}>*</span></label>
+            <select value={coach} onChange={e=>{setCoach(e.target.value);setErrors(er=>({...er,coach:false}));}}
+              style={{ ...fbInput, borderColor: errors.coach ? "#c20000" : "rgba(240,236,224,0.07)" }}>
+              <option value="">Select coach...</option>
+              {FB_COACHES.map(c=><option key={c} value={c} style={{background:"#1e1b17",color:"#f0ece0"}}>{c}</option>)}
+            </select>
+            {errors.coach && <p style={fbErr}>Select a coach.</p>}
+          </div>
+        )}
+
+        {/* Date + Time row */}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0.75rem", marginBottom:"1rem" }}>
+          <div>
+            <label style={fbLabel}>Date <span style={{color:"#c20000"}}>*</span></label>
+            <input type="date" value={classDate} onChange={e=>{setClassDate(e.target.value);setErrors(er=>({...er,classDate:false}));}}
+              style={{ ...fbInput, borderColor: errors.classDate ? "#c20000" : "rgba(240,236,224,0.07)" }} />
+            {errors.classDate && <p style={fbErr}>Select a date.</p>}
+          </div>
+          <div>
+            <label style={fbLabel}>Time <span style={{color:"#c20000"}}>*</span></label>
+            <button type="button" onClick={()=>setTpOpen(o=>!o)}
+              style={{ ...fbInput, textAlign:"left", cursor:"pointer", color: hora ? C.text : "rgba(240,236,224,0.25)", borderColor: errors.hora ? "#c20000" : "rgba(240,236,224,0.07)" }}>
+              {hora || "Select time..."}
+            </button>
+            {errors.hora && <p style={fbErr}>Select a time.</p>}
+          </div>
+        </div>
+
+        {/* Drum picker */}
+        {tpOpen && (
+          <>
+            <div style={{ background:"rgba(240,236,224,0.04)", border:"1px solid rgba(240,236,224,0.1)", borderRadius:12, overflow:"hidden", marginBottom:"0.75rem", position:"relative" }}>
+              <div style={{ position:"absolute", top:"50%", left:0, right:0, height:44, transform:"translateY(-50%)", background:"rgba(240,236,224,0.06)", borderTop:"1px solid rgba(240,236,224,0.1)", borderBottom:"1px solid rgba(240,236,224,0.1)", pointerEvents:"none", borderRadius:6, margin:"0 8px" }} />
+              <div style={{ display:"flex", height:220 }}>
+                <div ref={drumH} className="fb-drum" style={drumCol} onScroll={()=>handleDrumScroll("h")}>
+                  {FB_HOURS.map((v,i)=><div key={v} onClick={()=>snapDrum("h",i)} style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",scrollSnapAlign:"center",fontSize:22,fontWeight:i===tpH?600:400,color:i===tpH?C.text:C.text3,cursor:"pointer",userSelect:"none"}}>{v}</div>)}
+                </div>
+                <div ref={drumM} className="fb-drum" style={drumCol} onScroll={()=>handleDrumScroll("m")}>
+                  {FB_MINS.map((v,i)=><div key={v} onClick={()=>snapDrum("m",i)} style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",scrollSnapAlign:"center",fontSize:22,fontWeight:i===tpM?600:400,color:i===tpM?C.text:C.text3,cursor:"pointer",userSelect:"none"}}>{v}</div>)}
+                </div>
+                <div ref={drumAP} className="fb-drum" style={drumCol} onScroll={()=>handleDrumScroll("ap")}>
+                  {FB_AMPM.map((v,i)=><div key={v} onClick={()=>snapDrum("ap",i)} style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",scrollSnapAlign:"center",fontSize:22,fontWeight:i===tpAP?600:400,color:i===tpAP?C.text:C.text3,cursor:"pointer",userSelect:"none"}}>{v}</div>)}
+                </div>
+              </div>
+            </div>
+            <button type="button" onClick={confirmTime} style={{ width:"100%", background:C.green, border:"none", borderRadius:9, color:"#0d0b08", fontFamily:"inherit", fontSize:14, fontWeight:700, padding:"0.75rem", cursor:"pointer", marginBottom:"0.5rem" }}>Confirm time</button>
+          </>
+        )}
+
+        {/* Class type */}
+        <div style={{ marginBottom:"1rem" }}>
+          <label style={fbLabel}>Class type <span style={{color:"#c20000"}}>*</span></label>
+          <div style={{ display:"flex", gap:"0.5rem" }}>
+            {["Group","Private"].map(t => (
+              <button key={t} type="button" onClick={()=>{setClassType(t);setErrors(er=>({...er,classType:false}));}}
+                style={{ flex:1, padding:"0.65rem", borderRadius:9, border:`1px solid ${classType===t ? C.green : "rgba(240,236,224,0.1)"}`, background: classType===t ? "rgba(109,181,138,0.12)" : "transparent", color: classType===t ? C.green : C.text3, fontFamily:"inherit", fontSize:13, fontWeight:600, cursor:"pointer", transition:"all 0.15s" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+          {errors.classType && <p style={fbErr}>Select a class type.</p>}
+        </div>
+
+        {/* Reading toggle */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0.75rem 0", borderTop:`1px solid rgba(240,236,224,0.07)` }}>
+          <div>
+            <p style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:2 }}>This class included reading</p>
+            <p style={{ fontSize:11, color:C.text3 }}>Enables the Reading Engagement score for all students</p>
+          </div>
+          <button type="button" onClick={()=>setHasReading(r=>!r)}
+            style={{ width:44, height:24, borderRadius:12, border:"none", background: hasReading ? C.green : "rgba(240,236,224,0.12)", cursor:"pointer", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
+            <span style={{ position:"absolute", top:2, left: hasReading ? 22 : 2, width:20, height:20, borderRadius:"50%", background:"#fff", transition:"left 0.2s" }} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Students ── */}
+      {students.map((s,i) => (
+        <NewStudentCard key={i} idx={i} isOnly={students.length===1} data={s}
+          onChange={updateStudent} onRemove={() => setStudents(a=>a.filter((_,j)=>j!==i))}
+          onToggleNoShow={handleNoShowToggle}
+          hasReading={hasReading} errors={errors} />
+      ))}
+
+      <button type="button" onClick={()=>setStudents(a=>[...a,emptyStudent()])}
+        style={{ width:"100%", background:"transparent", border:"1px dashed rgba(240,236,224,0.1)", borderRadius:14, color:"rgba(240,236,224,0.3)", fontFamily:"inherit", fontSize:13, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase", padding:"1rem", cursor:"pointer", transition:"all 0.2s", marginBottom:"0.75rem", minHeight:44 }}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.25)";e.currentTarget.style.color=C.text2;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.1)";e.currentTarget.style.color="rgba(240,236,224,0.3)";}}>
+        + Add student
+      </button>
+
+      {submitErr && <p style={{ fontSize:12, color:"#c20000", marginBottom:"0.75rem", textAlign:"center" }}>{submitErr}</p>}
+
+      <button type="button" onClick={handleSubmit} disabled={submitting}
+        style={{ width:"100%", background: submitting ? "rgba(109,181,138,0.4)" : C.green, border:"none", borderRadius:12, color:"#0d0b08", fontFamily:"inherit", fontSize:15, fontWeight:700, padding:"1rem", cursor: submitting ? "not-allowed" : "pointer", transition:"all 0.2s", marginBottom:"2rem" }}>
+        {submitting ? "Submitting..." : "Submit Feedback"}
+      </button>
+    </div>
+  );
+}
+
 // CLASS FEEDBACK VIEW
 function ClassFeedbackView({ user, role, setActive }) {
   const { data, loading } = useSheet(SHEET_CLASS);
@@ -1703,7 +2180,7 @@ function StudentSurveysView({ user, role, setActive }) {
         </div>
       )}
       {loading ? (
-        <div style={{ display:"flex", gap:6, padding:"2rem" }}>{[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div>
+        <div style={{ display:"flex", justifyContent:"center", gap:6, padding:"2rem" }}>{[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div>
       ) : filtered.length === 0 ? (
         <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center" }}>
           <p style={{ fontSize:13, color:C.text3 }}>No surveys yet.</p>
@@ -2157,22 +2634,22 @@ function MasterSchedule({ role, user }) {
   return (
     <div style={{ width: "100%", maxWidth: 1000 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", position: "relative" }}>
-        <div>
+        <button onClick={() => setWeekOffset(w => Math.max(MIN_OFFSET, w - 1))}
+          style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "4px 12px", color: C.text2, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>‹</button>
+        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
           <button onClick={() => setShowCal(v => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Icon name="calendar" size={16} color={C.text} />
             <h2 style={{ fontSize: "clamp(1.1rem, 2vw, 1.4rem)", fontWeight: 900, letterSpacing: "-0.02em", color: C.text }}>{weekLabel}</h2>
             <span style={{ fontSize: 12, color: C.text }}>▾</span>
           </button>
           {showCal && (
-            <div style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 50 }}>
+            <div style={{ position: "absolute", top: "calc(100% + 8px)", left: "50%", transform: "translateX(-50%)", zIndex: 50 }}>
               <MiniCalendar weekOffset={weekOffset} setWeekOffset={setWeekOffset} onClose={() => setShowCal(false)} />
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button onClick={() => setWeekOffset(w => Math.max(MIN_OFFSET, w - 1))} style={{ background: C.surface2, border: `1px solid ${C.border2}`, borderRadius: 8, padding: "0.4rem 0.75rem", color: C.text2, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>←</button>
-          <button onClick={() => setWeekOffset(w => Math.min(MAX_OFFSET, w + 1))} style={{ background: C.surface2, border: `1px solid ${C.border2}`, borderRadius: 8, padding: "0.4rem 0.75rem", color: C.text2, cursor: "pointer", fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>→</button>
-        </div>
+        <button onClick={() => setWeekOffset(w => Math.min(MAX_OFFSET, w + 1))}
+          style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "4px 12px", color: C.text2, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>›</button>
       </div>
 
       {loading && (
@@ -2414,7 +2891,7 @@ function InvitesView({ user }) {
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", gap: 6, padding: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "1rem" }}>
           {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.text3, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
         </div>
       ) : displayed.length === 0 ? (
@@ -2901,7 +3378,7 @@ function ProfileView({ user, defaultSection = "bio", setActive }) {
   const rolColors = ROL_COLORS;
 
   if (loading) return (
-    <div style={{ display: "flex", gap: 6, padding: "2rem" }}>
+    <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "2rem" }}>
       {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.text3, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
     </div>
   );
@@ -3417,7 +3894,7 @@ function SettingsView({ user, setActive }) {
 }
 
 // ── USER MENU ─────────────────────────────────────────────────
-function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCollapsed }) {
+function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCollapsed, unreadWA = 0, setUnreadWA }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const initial = (user?.nombre || user?.email || "U")[0].toUpperCase();
@@ -3447,7 +3924,7 @@ function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCol
           {/* Menu items */}
           {[
             { label: "Settings",      icon: "settings", action: () => { setActive("settings"); setOpen(false); if (isMobile) setCollapsed(true); } },
-            { label: "Notifications", icon: "bell",    action: () => setOpen(false) },
+            { label: "Notifications", icon: "bell",    action: () => { setActive("whatsapp"); setOpen(false); if (isMobile) setCollapsed(true); }, badge: unreadWA > 0 ? unreadWA : null },
             { label: "Sign out",      icon: "logout",  action: () => { setOpen(false); onLogout(); } },
           ].map((item, i, arr) => (
             <button key={item.label} onClick={item.action}
@@ -3455,7 +3932,14 @@ function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCol
               onMouseEnter={e => e.currentTarget.style.background = C.surface}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
               <Icon name={item.icon} size={15} color={item.danger ? C.red : C.text2} />
-              <span style={{ fontSize: 13, fontWeight: 500, color: item.danger ? C.red : C.text2 }}>{item.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 500, color: item.danger ? C.red : C.text2, flex: 1 }}>{item.label}</span>
+              {item.badge && (
+                <span style={{
+                  background: C.red, color: "#fff", fontSize: 10, fontWeight: 700,
+                  borderRadius: "50%", minWidth: 18, height: 18, padding: "0 4px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{item.badge > 99 ? "99+" : item.badge}</span>
+              )}
             </button>
           ))}
         </div>
@@ -3489,7 +3973,7 @@ function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCol
 }
 
 // ── SIDEBAR ────────────────────────────────────────────────────
-function Sidebar({ role, user, active, setActive, collapsed, setCollapsed, isMobile, onLogout }) {
+function Sidebar({ role, user, active, setActive, collapsed, setCollapsed, isMobile, onLogout, unreadWA, setUnreadWA }) {
   const navItems = NAV[role] || NAV.student;
   const roleLabels = { student: "Student", coach: "Coach", admin: "Admin" };
   const roleColors = { student: C.text2, coach: C.green, admin: C.amber };
@@ -3603,17 +4087,1068 @@ function Sidebar({ role, user, active, setActive, collapsed, setCollapsed, isMob
         </nav>
 
         {/* User menu bottom */}
-        <UserMenu user={user} role={role} collapsed={collapsed} isMobile={isMobile} onLogout={onLogout} setActive={setActive} setCollapsed={setCollapsed} />
+        <UserMenu user={user} role={role} collapsed={collapsed} isMobile={isMobile} onLogout={onLogout} setActive={setActive} setCollapsed={setCollapsed} unreadWA={unreadWA} setUnreadWA={setUnreadWA} />
       </aside>
     </>
   );
 }
 
+// ── NEXT CLASSES VIEW ─────────────────────────────────────────
+function NextClassesView({ user, role }) {
+  const [dayOffset,    setDayOffset]    = useState(0);
+  const [dayCache,     setDayCache]     = useState({});
+  const [prevWeekEvs,  setPrevWeekEvs]  = useState([]);
+  const [currWeekEvs,  setCurrWeekEvs]  = useState([]);
+  const [studentNotes, setStudentNotes] = useState([]);
+  const [loadingDay,   setLoadingDay]   = useState(true);
+  const [loadingInit,  setLoadingInit]  = useState(true);
+  const [coachName,    setCoachName]    = useState(user?.nombre || "");
+  const [coachFilter,  setCoachFilter]  = useState("All");
+
+  const COACHES      = ["Ana","Ricardo","Jesse","Gabriela","Mafer"];
+  const COACH_COLORS = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
+
+  const getDayBounds = (offset) => {
+    const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(0,0,0,0);
+    const end = new Date(d); end.setHours(23,59,59,999);
+    return { dayStart: d, dayEnd: end };
+  };
+  const { dayStart, dayEnd } = getDayBounds(dayOffset);
+
+  const fetchTeams = (s, e) => fetch(EDGE_URL, {
+    method:"POST", headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
+    body: JSON.stringify({ source:"teams", startDateTime: s.toISOString(), endDateTime: e.toISOString() })
+  }).then(r=>r.json()).then(d =>
+    Array.isArray(d) ? d.map(ev=>({...ev, date: new Date(new Date(ev.start).getTime()-6*60*60*1000)})).filter(ev=>!isNaN(ev.date)) : []
+  ).catch(()=>[]);
+
+  // Mount: coach name + student notes + previous week (for cross-check)
+  useEffect(() => {
+    const nameP = role === "coach"
+      ? supabase.from("profiles").select("nombre").eq("id", user.id).single()
+          .then(({ data }) => data?.nombre || user?.nombre || "")
+      : Promise.resolve("");
+
+    const notesP = fetch(EDGE_URL, {
+      method:"POST", headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
+      body: JSON.stringify({ source:"sheets", sheetId: SHEET_STUDENT })
+    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+
+    // Previous week + current week (Mon→now) for cross-check
+    const now = new Date(); const dow = now.getDay();
+
+    // Semana pasada (lun–sáb)
+    const pMon = new Date(now); pMon.setDate(now.getDate()-(dow===0?6:dow-1)-7); pMon.setHours(0,0,0,0);
+    const pSat = new Date(pMon); pSat.setDate(pMon.getDate()+5); pSat.setHours(23,59,59,999);
+    const prevP = (_schedCache[-1] && _schedCache[-1].length > 0)
+      ? Promise.resolve(_schedCache[-1])
+      : fetchTeams(pMon, pSat);
+
+    // Esta semana: lunes 00:00 → ahora
+    // Captura clases de días anteriores de la semana actual (ej. martes cuando hoy es jueves)
+    const cMon = new Date(now); cMon.setDate(now.getDate()-(dow===0?6:dow-1)); cMon.setHours(0,0,0,0);
+    const currP = cMon < now ? fetchTeams(cMon, now) : Promise.resolve([]);
+
+    Promise.all([nameP, notesP, prevP, currP]).then(([name, notes, prevEvs, currEvs]) => {
+      if (name) setCoachName(name);
+      setStudentNotes(
+        notes.filter(r => r.fecha && r.estudiante_nombre && r.coach && r.hora_clase)
+          .map(r => {
+            const raw = r.fecha.split(",")[0].trim();
+            const [d, m, y] = raw.split("/");
+            return { ...r, _date: new Date(+y, +m-1, +d) };
+          })
+          .filter(r => !isNaN(r._date))
+      );
+      setPrevWeekEvs(prevEvs);
+      setCurrWeekEvs(currEvs);
+      setLoadingInit(false);
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch day's Teams events (with cache)
+  useEffect(() => {
+    if (dayCache[dayOffset] !== undefined) { setLoadingDay(false); return; }
+    setLoadingDay(true);
+    fetchTeams(dayStart, dayEnd).then(evs => {
+      // DEBUG — ver raw start string vs fecha computada para detectar bug de timezone
+      console.table(evs.map(ev => ({
+        summary:  ev.summary,
+        raw_start: ev.start,                               // string crudo de Teams/Graph
+        computed:  ev.date ? ev.date.toISOString() : "ERR", // después de -6h
+        display:   ev.date ? ev.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true}) : "ERR",
+      })));
+      setDayCache(c => ({ ...c, [dayOffset]: evs }));
+      setLoadingDay(false);
+    });
+  }, [dayOffset]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const nowTs      = new Date();
+  const dayEvents  = (dayCache[dayOffset] || []).filter(ev => ev.date >= dayStart && ev.date <= dayEnd);
+  const activeCoach = role === "coach" ? coachName : (coachFilter !== "All" ? coachFilter : null);
+  const classes    = dayEvents.filter(ev => !activeCoach || ev.coach === activeCoach).sort((a,b) => a.date - b.date);
+
+  // Pool para cross-check: prioridad más reciente primero
+  //   1. Eventos pasados de HOY (dayOffset actual)
+  //   2. Resto de la semana actual (lunes → ayer/ahora) — captura ej. martes cuando hoy es jueves
+  //   3. Semana pasada — fallback si no hubo clase esta semana
+  const seenPool = new Set();
+  const pool = [
+    ...dayEvents.filter(ev => ev.date < nowTs),
+    ...currWeekEvs,
+    ...prevWeekEvs,
+  ].filter(ev => {
+    const k = ev.uid || (ev.summary + ev.date.toISOString());
+    if (seenPool.has(k)) return false; seenPool.add(k); return true;
+  });
+
+  // Extract a stable alpha token from an email or display name.
+  // "manfredcordoba06@gmail.com" → "manfredcordoba"
+  // "helcha_82@hotmail.com"      → "helcha"
+  // "Hellen Something"           → "hellen"
+  // "Melissa"                    → "melissa"
+  const toToken = s => s.trim().split('@')[0].split(/[\s_]/)[0].toLowerCase().replace(/\d/g,'');
+  const getTokenSet = str => new Set(
+    (str||'').split(/[,;&\/]/).map(toToken).filter(t => t.length >= 3)
+  );
+
+  // Compute pre-class briefing for one class event.
+  //
+  // Cross-check logic (source of truth):
+  //   Teams ev.date       → ancla principal: fecha EXACTA de la clase pasada
+  //   Teams ev.date hora  → hora exacta del evento pasado
+  //   Teams ev.coach      → coach que impartió ESA sesión específica (puede rotar)
+  //   Sheet col A r._date → ventana de envío: mismo día o hasta 2 días después de la clase
+  //   Sheet col B r.coach → debe coincidir con ev.coach (el coach del evento PASADO, no el actual)
+  //   Sheet col C r.hora_clase → debe coincidir con la hora del evento pasado
+  //
+  // Precision rules:
+  //   1. Only use a past event if its students OVERLAP with the current class's students.
+  //      (Prevents showing Christopher's notes when Manfred took the slot.)
+  //   2. After finding matching notes, filter OUT notes for students who LEFT the class.
+  //      (Prevents showing Melissa's notes when only Hellen remains.)
+  const getBriefing = (cls) => {
+    const clsH = cls.date.getHours(), clsM = cls.date.getMinutes();
+    const clsSum = (cls.summary||"").toLowerCase().trim();
+    const clsSeriesId = cls.seriesId || null;
+    // NOTE: clsCoach is NOT used to filter past-event candidates — coaches may rotate.
+    // The coach of the past event (ev.coach) is what matters for the Sheet cross-check.
+    const currentTokens = getTokenSet(cls.estudiantes);
+
+    // 1️⃣ Primary match: same recurring series (coach-agnostic — coaches may rotate)
+    const bySeriesId = clsSeriesId
+      ? pool.filter(ev => ev.seriesId && ev.seriesId === clsSeriesId).sort((a,b)=>b.date-a.date)
+      : [];
+
+    // 2️⃣ Fallback: same time slot, coach-agnostic (student overlap check guards precision)
+    const matchT = ev => ev.date.getHours() === clsH && ev.date.getMinutes() === clsM;
+    const matchS = ev => { const s=(ev.summary||"").toLowerCase().trim(); return !clsSum||!s||s===clsSum; };
+
+    const candidates = bySeriesId.length > 0 ? bySeriesId : (() => {
+      const ts = pool.filter(ev => matchT(ev) && matchS(ev)).sort((a,b)=>b.date-a.date);
+      return ts.length > 0 ? ts : pool.filter(matchT).sort((a,b)=>b.date-a.date);
+    })();
+
+    for (const ev of candidates) {
+      // ── Rule 1: student overlap check ──────────────────────────
+      const pastTokens = getTokenSet(ev.estudiantes);
+      if (currentTokens.size > 0 && pastTokens.size > 0) {
+        const hasOverlap = [...currentTokens].some(ct =>
+          [...pastTokens].some(pt => ct === pt || ct.startsWith(pt) || pt.startsWith(ct))
+        );
+        if (!hasOverlap) continue; // Completely different students → skip
+      }
+
+      // ── Sheet cross-check usando ventana lazy (día a día) ─────
+      // col C format: hora exacta del evento pasado (12h AM/PM)
+      const h = ev.date.getHours(), m = ev.date.getMinutes();
+      const tStr = `${h%12||12}:${m.toString().padStart(2,"0")} ${h>=12?"PM":"AM"}`;
+      const evDay = new Date(ev.date); evDay.setHours(0,0,0,0);
+
+      // Ventana lazy: busca día 0 primero; avanza solo si no hay notas.
+      // Evita capturar notas de otra clase del mismo coach+hora el día siguiente.
+      const matchDay = d => studentNotes.filter(r =>
+        r._date.getTime() === d.getTime() && r._date < nowTs &&
+        // col B: coach del EVENTO PASADO (ev.coach), no el de la clase actual
+        r.coach.split(" ")[0] === ev.coach &&
+        // col C: hora exacta del evento pasado
+        (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase()
+      );
+      const d0 = matchDay(evDay);
+      const evDay1 = new Date(evDay); evDay1.setDate(evDay.getDate()+1);
+      const d1 = d0.length === 0 ? matchDay(evDay1) : [];
+      const evDay2 = new Date(evDay); evDay2.setDate(evDay.getDate()+2);
+      const d2 = d1.length === 0 ? matchDay(evDay2) : [];
+      const notes = d0.length > 0 ? d0 : d1.length > 0 ? d1 : d2;
+      if (notes.length === 0) continue;
+
+      // ── Rule 2: excluir notas de estudiantes que salieron ──────
+      // Filtro negativo: falla silencioso (muestra de más, nunca oculta válidos)
+      const droppedTokens = [...pastTokens].filter(pt =>
+        !([...currentTokens].some(ct => ct === pt || ct.startsWith(pt) || pt.startsWith(ct)))
+      );
+      const filteredNotes = droppedTokens.length > 0
+        ? notes.filter(r => {
+            const nt = (r.estudiante_nombre||"").split(" ")[0].toLowerCase();
+            return !droppedTokens.some(d => nt === d || nt.startsWith(d) || d.startsWith(nt));
+          })
+        : notes;
+
+      if (filteredNotes.length > 0) return filteredNotes;
+      // If all notes were for dropped students → continue searching older events
+    }
+    return [];
+  };
+
+  const dayLabel = dayOffset===0 ? "Today" : dayOffset===1 ? "Tomorrow" : dayOffset===-1 ? "Yesterday"
+    : dayOffset>0 ? `+${dayOffset} days` : `${dayOffset} days`;
+
+  return (
+    <div style={{ maxWidth:700, width:"100%" }}>
+      {/* Day navigator */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
+        <button onClick={()=>setDayOffset(o=>o-1)}
+          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1 }}>‹</button>
+        <div style={{ textAlign:"center" }}>
+          <p style={{ fontSize:11, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:dayOffset===0?C.green:C.text3, margin:0 }}>{dayLabel}</p>
+          <p style={{ fontSize:11, color:C.text3, margin:0 }}>{dayStart.toLocaleDateString("en",{weekday:"short",month:"long",day:"numeric"})}</p>
+        </div>
+        <button onClick={()=>setDayOffset(o=>o+1)}
+          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1 }}>›</button>
+      </div>
+
+      {/* Admin coach filter */}
+      {role === "admin" && (
+        <div style={{ display:"flex", gap:"0.5rem", flexWrap:"wrap", marginBottom:"1rem" }}>
+          {["All",...COACHES].map(c => (
+            <button key={c} onClick={()=>setCoachFilter(c)}
+              style={{ fontSize:11, fontWeight:700, padding:"4px 12px", borderRadius:50, cursor:"pointer", border:"1px solid",
+                borderColor: coachFilter===c ? (COACH_COLORS[c]||C.green) : C.border2,
+                background:  coachFilter===c ? (COACH_COLORS[c]||C.green)+"22" : "transparent",
+                color:       coachFilter===c ? (COACH_COLORS[c]||C.green) : C.text3 }}>
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Class cards */}
+      {loadingDay || loadingInit ? (
+        <div style={{ display:"flex", gap:6, padding:"3rem", justifyContent:"center" }}>
+          {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite` }}/>)}
+        </div>
+      ) : classes.length === 0 ? (
+        <div style={{ ...CARD, borderRadius:16, padding:"2.5rem", textAlign:"center" }}>
+          <p style={{ fontSize:13, color:C.text3 }}>No classes{activeCoach?` for ${activeCoach}`:""} on this day.</p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:"1rem" }}>
+          {classes.map((cls, i) => {
+            const briefing = getBriefing(cls);
+            const isPast   = cls.date < nowTs;
+            return (
+              <div key={cls.uid||i} style={{ ...CARD, borderRadius:16, padding:"1.25rem 1.5rem", opacity:isPast?0.65:1, transition:"opacity 0.2s" }}>
+                {/* Header */}
+                <div style={{ display:"flex", alignItems:"center", gap:"1rem" }}>
+                  <div style={{ width:40, height:40, borderRadius:10, flexShrink:0,
+                    background: isPast ? "rgba(240,236,224,0.04)" : "rgba(37,211,102,0.1)",
+                    border: `1px solid ${isPast ? C.border : "rgba(37,211,102,0.25)"}`,
+                    display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <Icon name="calendar" size={18} color={isPast?C.text3:C.green} />
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:11, fontWeight:600, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:2,
+                      color: isPast ? C.text3 : C.green }}>
+                      {isPast ? "Past" : "Upcoming"}
+                      {role==="admin" && cls.coach && (
+                        <span style={{ color:COACH_COLORS[cls.coach]||C.text3, marginLeft:8 }}>· {cls.coach}</span>
+                      )}
+                    </p>
+                    <p style={{ fontSize:15, fontWeight:700, color:C.text }}>
+                      {cls.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true})}
+                      {cls.summary && cls.summary!=="Sin título" && (
+                        <span style={{ fontSize:12, fontWeight:500, color:C.text2, marginLeft:8 }}>{cls.summary}</span>
+                      )}
+                    </p>
+                    {cls.estudiantes && (
+                      <p style={{ fontSize:11, color:C.text3, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cls.estudiantes}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Pre-class briefing */}
+                {briefing.length > 0 ? (
+                  <div style={{ borderTop:`1px solid ${C.border}`, marginTop:"1rem", paddingTop:"1rem" }}>
+                    <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:C.text3, marginBottom:"0.65rem" }}>
+                      Last session · Student notes
+                    </p>
+                    <div style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
+                      {briefing.map((r, j) => (
+                        <div key={j} style={{ borderLeft:`2px solid ${C.border2}`, paddingLeft:"0.75rem" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"0.35rem", flexWrap:"wrap" }}>
+                            <p style={{ fontSize:12, fontWeight:700, color:C.text }}>{r.estudiante_nombre}</p>
+                            <p style={{ fontSize:10, color:C.text3 }}>{r.fecha?.split(",")[0]}</p>
+                          </div>
+                          {r.nota && (
+                            <p style={{ fontSize:11, color:C.text2, lineHeight:1.5, marginBottom:r.next_step?"0.3rem":0 }}>
+                              <span style={{ color:C.text3, fontWeight:600 }}>Note: </span>{r.nota}
+                            </p>
+                          )}
+                          {r.next_step && (
+                            <p style={{ fontSize:11, lineHeight:1.5 }}>
+                              <span style={{ color:C.text3, fontWeight:600 }}>Next step: </span>
+                              <span style={{ color:C.text }}>{r.next_step}</span>
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : !isPast && (
+                  <div style={{ borderTop:`1px solid ${C.border}`, marginTop:"1rem", paddingTop:"0.75rem" }}>
+                    <p style={{ fontSize:11, color:C.text3 }}>No previous session notes for this class.</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── VIEW TITLES (shown in top bar) ────────────────────────────
+// ── DINÁMICAS ──────────────────────────────────────────────────
+const OPT_COLORS = ['#7a2020','#1e427a','#7a621e','#1e6645'];
+function getYouTubeId(url) {
+  const m = (url || '').match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function DinamicasView({ user }) {
+  const [sub, setSub]                 = useState('list');
+  const [decks, setDecks]             = useState([]);
+  const [editDeck, setEditDeck]       = useState(null);
+  const [editingSlide, setEditingSlide] = useState(null);
+  const [session, setSession]         = useState(null);
+  const [sessionSlides, setSessionSlides] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [responses, setResponses]     = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [previewSlide, setPreviewSlide] = useState(0);
+  const [slidesToDelete, setSlidesToDelete] = useState([]);
+  const chanRef = useRef(null);
+
+  const BTN  = { background: C.text, color: C.bg, border: "none", borderRadius: 50, fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", padding: "8px 18px", cursor: "pointer", minHeight: 38, whiteSpace: "nowrap" };
+  const GHOST = { background: "transparent", border: `1px solid ${C.border2}`, borderRadius: 50, fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: C.text2, padding: "6px 14px", cursor: "pointer", minHeight: 34, whiteSpace: "nowrap" };
+
+  useEffect(() => { loadDecks(); return () => { if (chanRef.current) supabase.removeChannel(chanRef.current); }; }, []);
+
+  async function loadDecks() {
+    setLoading(true);
+    const { data } = await supabase.from('decks').select('id,title,created_at').eq('coach_id', user.id).order('created_at', { ascending: false });
+    const withCount = await Promise.all((data || []).map(async d => {
+      const { count } = await supabase.from('slides').select('*', { count: 'exact', head: true }).eq('deck_id', d.id);
+      return { ...d, slide_count: count || 0 };
+    }));
+    setDecks(withCount);
+    setLoading(false);
+  }
+
+  function createDeck() {
+    const tempId = 'new-' + Date.now();
+    setEditDeck({ id: tempId, coach_id: user.id, title: 'New presentation', slides: [] });
+    setEditingSlide(null);
+    setTitleEditing(false);
+    setSlidesToDelete([]);
+    setSub('editor');
+  }
+
+  async function openEditor(deck) {
+    const { data: slides } = await supabase.from('slides').select('*').eq('deck_id', deck.id).order('position');
+    const sl = slides || [];
+    setEditDeck({ ...deck, slides: sl });
+    setEditingSlide(sl.length ? 0 : null);
+    setSlidesToDelete([]);
+    setSub('editor');
+  }
+
+  async function saveDeck() {
+    setSaving(true);
+    try {
+      let deckId = editDeck.id;
+
+      if (String(deckId).startsWith('new-')) {
+        const { data: newDeck, error: deckErr } = await supabase
+          .from('decks').insert({ coach_id: user.id, title: editDeck.title }).select().single();
+        if (deckErr) throw new Error('deck insert: ' + deckErr.message);
+        deckId = newDeck.id;
+      } else {
+        const { error: deckErr } = await supabase.from('decks').update({ title: editDeck.title }).eq('id', deckId);
+        if (deckErr) throw new Error('deck update: ' + deckErr.message);
+      }
+
+      for (const slideId of slidesToDelete) {
+        await supabase.from('responses').delete().eq('slide_id', slideId);
+        const { error } = await supabase.from('slides').delete().eq('id', slideId);
+        if (error) throw new Error('slide delete: ' + error.message);
+      }
+      setSlidesToDelete([]);
+
+      for (const slide of editDeck.slides) {
+        const payload = { deck_id: deckId, position: slide.position, type: slide.type, question: slide.question, options: slide.options, correct_answer: slide.correct_answer, time_limit: slide.time_limit, branch_targets: slide.branch_targets || null, image_url: slide.image_url || null, video_url: slide.video_url || null };
+        if (String(slide.id).startsWith('new-')) {
+          const { error } = await supabase.from('slides').insert(payload);
+          if (error) throw new Error('slide insert: ' + error.message);
+        } else {
+          const { error } = await supabase.from('slides').update(payload).eq('id', slide.id);
+          if (error) throw new Error('slide update: ' + error.message);
+        }
+      }
+
+      await loadDecks();
+      setSub('list');
+    } catch (err) {
+      console.error('[save] ERROR:', err.message);
+      alert('Save error: ' + err.message);
+    }
+    setSaving(false);
+  }
+
+  async function deleteDeck(id) {
+    const { error: sErr } = await supabase.from('slides').delete().eq('deck_id', id);
+    if (sErr) { alert('Error deleting slides: ' + sErr.message); return; }
+    const { error: dErr } = await supabase.from('decks').delete().eq('id', id);
+    if (dErr) { alert('Error deleting deck: ' + dErr.message); return; }
+    loadDecks();
+  }
+
+  function deleteSlide(idx) {
+    const slide = editDeck.slides[idx];
+    if (!String(slide.id).startsWith('new-')) {
+      setSlidesToDelete(prev => [...prev, slide.id]);
+    }
+    const newSlides = editDeck.slides.filter((_, i) => i !== idx).map((s, i) => ({ ...s, position: i }));
+    setEditDeck(p => ({ ...p, slides: newSlides }));
+    setEditingSlide(newSlides.length ? Math.min(idx, newSlides.length - 1) : null);
+  }
+
+  function makeSlide(type, position) {
+    return {
+      id: 'new-' + Date.now(), deck_id: editDeck.id, position,
+      type, question: '', options: ['','','',''], correct_answer: null,
+      time_limit: ['multiple_choice','story_choice'].includes(type) ? 30 : 0,
+      branch_targets: type === 'story_choice' ? [null,null,null,null] : null,
+      image_url: null, video_url: null,
+    };
+  }
+
+  function addSlide(type) {
+    const s = makeSlide(type, editDeck.slides.length);
+    const newSlides = [...editDeck.slides, s];
+    setEditDeck(p => ({ ...p, slides: newSlides }));
+    setEditingSlide(newSlides.length - 1);
+  }
+
+  function addSlideAfter(afterIdx, type) {
+    const s = makeSlide(type, afterIdx + 1);
+    const before = editDeck.slides.slice(0, afterIdx + 1);
+    const after  = editDeck.slides.slice(afterIdx + 1);
+    const all    = [...before, s, ...after].map((sl, i) => ({ ...sl, position: i }));
+    setEditDeck(p => ({ ...p, slides: all }));
+    setEditingSlide(afterIdx + 1);
+  }
+
+  function updateSlide(idx, field, value) {
+    setEditDeck(p => ({ ...p, slides: p.slides.map((s, i) => i === idx ? { ...s, [field]: value } : s) }));
+  }
+
+  function updateOption(slideIdx, optIdx, value) {
+    const opts = [...(editDeck.slides[slideIdx].options || ['','','',''])];
+    opts[optIdx] = value;
+    updateSlide(slideIdx, 'options', opts);
+  }
+
+  function updateBranchTarget(slideIdx, optIdx, value) {
+    const targets = [...(editDeck.slides[slideIdx].branch_targets || [null,null,null,null])];
+    targets[optIdx] = value === '' ? null : parseInt(value);
+    updateSlide(slideIdx, 'branch_targets', targets);
+  }
+
+  function createBranches(slideIdx) {
+    const slide = editDeck.slides[slideIdx];
+    const validOpts = (slide.options || []).map((o, i) => ({ o, i })).filter(x => x.o.trim());
+    if (validOpts.length < 2) return;
+    const insertAt = slideIdx + 1;
+    const newSlides = validOpts.map(({ o }, bi) => ({
+      id: 'new-' + Date.now() + '-' + bi,
+      deck_id: editDeck.id, position: insertAt + bi,
+      type: 'story', question: '',
+      options: ['','','',''], correct_answer: null, time_limit: 0, branch_targets: null,
+    }));
+    const branchTargets = (slide.options || []).map((o, oi) => {
+      if (!o.trim()) return null;
+      const bi = validOpts.findIndex(x => x.i === oi);
+      return bi >= 0 ? insertAt + bi : null;
+    });
+    const updatedChoice = { ...slide, branch_targets: branchTargets };
+    const before = editDeck.slides.slice(0, slideIdx);
+    const after  = editDeck.slides.slice(slideIdx + 1).map((s, i) => ({ ...s, position: insertAt + newSlides.length + i }));
+    const all = [...before, updatedChoice, ...newSlides, ...after].map((s, i) => ({ ...s, position: i }));
+    setEditDeck(p => ({ ...p, slides: all }));
+    setEditingSlide(insertAt);
+  }
+
+  async function startSession(deckId, title) {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const { data: sess } = await supabase.from('sessions').insert({ deck_id: deckId, coach_id: user.id, code, status: 'waiting', current_slide_index: 0 }).select().single();
+    const { data: slides } = await supabase.from('slides').select('*').eq('deck_id', deckId).order('position');
+    setSession({ ...sess, deck_title: title });
+    setSessionSlides(slides || []);
+    setParticipants([]);
+    setResponses([]);
+    setSub('host');
+    if (chanRef.current) supabase.removeChannel(chanRef.current);
+    chanRef.current = supabase.channel('host-' + sess.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_participants', filter: `session_id=eq.${sess.id}` }, p => setParticipants(prev => [...prev, p.new]))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'responses', filter: `session_id=eq.${sess.id}` }, p => setResponses(prev => {
+        const filtered = prev.filter(r => !(r.participant_id === p.new.participant_id && r.slide_id === p.new.slide_id));
+        return [...filtered, p.new];
+      }))
+      .subscribe();
+  }
+
+  async function advanceSlide(newIdx) {
+    const { data } = await supabase.from('sessions').update({ current_slide_index: newIdx, slide_started_at: new Date().toISOString() }).eq('id', session.id).select().single();
+    setSession(p => ({ ...p, ...data }));
+    setResponses([]);
+  }
+
+  async function setStatus(status) {
+    const { data } = await supabase.from('sessions').update({ status }).eq('id', session.id).select().single();
+    setSession(p => ({ ...p, ...data }));
+    if (status === 'ended' && chanRef.current) supabase.removeChannel(chanRef.current);
+  }
+
+  async function advanceToWinner() {
+    const slide = sessionSlides[session.current_slide_index];
+    const slideResps = responses.filter(r => r.slide_id === slide?.id);
+    const counts = (slide.options || []).map((_, oi) => slideResps.filter(r => r.answer === String(oi)).length);
+    const maxCount = Math.max(...counts, 0);
+    const winnerIdx = counts.findIndex(c => c === maxCount && maxCount > 0);
+    const targets = slide.branch_targets || [];
+    const targetIdx = (winnerIdx >= 0 && targets[winnerIdx] != null) ? targets[winnerIdx] : session.current_slide_index + 1;
+    if (targetIdx < sessionSlides.length) await advanceSlide(targetIdx);
+    else await setStatus('ended');
+  }
+
+  // ── LIST ────────────────────────────────────────────────────────
+  if (sub === 'list') return (
+    <div style={{ maxWidth: 760, width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+        <p style={{ fontSize: 13, color: C.text2 }}>Interactive presentations for your live classes.</p>
+        <button onClick={createDeck} style={{ ...BTN, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon name="plus" size={13} color={C.bg} /> New
+        </button>
+      </div>
+      {loading ? <p style={{ color: C.text2, fontSize: 13 }}>Loading...</p>
+        : decks.length === 0 ? (
+          <div style={{ ...CARD, borderRadius: 16, padding: '3rem', textAlign: 'center' }}>
+            <Icon name="slides" size={32} color={C.text3} />
+            <p style={{ fontSize: 15, fontWeight: 700, color: C.text, marginTop: '1rem', marginBottom: 4 }}>No presentations yet</p>
+            <p style={{ fontSize: 13, color: C.text2 }}>Create your first interactive deck.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {decks.map(d => (
+              <div key={d.id} style={{ ...CARD, borderRadius: 14, padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(240,236,224,0.06)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon name="slides" size={18} color={C.text2} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</p>
+                  <p style={{ fontSize: 12, color: C.text3 }}>{d.slide_count} slide{d.slide_count !== 1 ? 's' : ''}</p>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => openEditor(d)} style={GHOST}>Edit</button>
+                  <button onClick={() => startSession(d.id, d.title)} style={BTN}>▶ Start</button>
+                  <button onClick={() => deleteDeck(d.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 18, padding: '0 4px', lineHeight: 1 }}>×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+
+  // ── EDITOR ──────────────────────────────────────────────────────
+  if (sub === 'editor' && editDeck) {
+    const slide = editingSlide !== null ? editDeck.slides[editingSlide] : null;
+    return (
+      <div style={{ maxWidth: 860, width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <button onClick={() => { loadDecks(); setSub('list'); }} style={{ ...GHOST, flexShrink: 0 }}>← Back</button>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {titleEditing ? (
+              <input autoFocus value={editDeck.title}
+                onChange={e => setEditDeck(p => ({ ...p, title: e.target.value }))}
+                onBlur={() => setTitleEditing(false)}
+                onKeyDown={e => e.key === 'Enter' && setTitleEditing(false)}
+                style={{ flex: 1, background: `rgba(240,236,224,0.05)`, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 16, fontWeight: 700, color: C.text, fontFamily: 'inherit', outline: 'none' }} />
+            ) : (
+              <>
+                <p style={{ fontSize: 16, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editDeck.title || 'Untitled'}</p>
+                <button onClick={() => setTitleEditing(true)} title="Rename" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 14, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>✎</button>
+              </>
+            )}
+          </div>
+          <button onClick={() => { setPreviewSlide(editingSlide ?? 0); setSub('preview'); }} style={{ ...GHOST, flexShrink: 0 }}>Preview</button>
+          <button onClick={saveDeck} disabled={saving} style={{ ...BTN, flexShrink: 0, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+          {/* Slide list */}
+          <div style={{ width: 170, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {editDeck.slides.map((s, i) => (
+              <button key={s.id} onClick={() => setEditingSlide(i)}
+                style={{ textAlign: 'left', padding: '8px 10px', borderRadius: 9, border: `1px solid ${editingSlide === i ? C.border2 : C.border}`, background: editingSlide === i ? 'rgba(240,236,224,0.06)' : 'transparent', cursor: 'pointer', color: C.text, fontFamily: 'inherit' }}>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.text3, marginBottom: 2 }}>
+                  {({story:'Story',story_choice:'Choice',open_question:'Open',info:'Info',multiple_choice:'Quiz'})[s.type] || s.type} · {i + 1}
+                </p>
+                <p style={{ fontSize: 12, color: s.question ? C.text2 : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 148 }}>
+                  {s.question || 'Sin texto'}
+                </p>
+              </button>
+            ))}
+            <button onClick={() => addSlide('story')} style={{ ...GHOST, width: '100%', marginTop: 4, fontSize: 11 }}>+ Story</button>
+            <button onClick={() => addSlide('story_choice')} style={{ ...GHOST, width: '100%', marginTop: 4, fontSize: 11 }}>+ Choice</button>
+            <button onClick={() => addSlide('open_question')} style={{ ...GHOST, width: '100%', marginTop: 4, fontSize: 11 }}>+ Open Q</button>
+            <button onClick={() => addSlide('multiple_choice')} style={{ ...GHOST, width: '100%', marginTop: 4, fontSize: 11 }}>+ Quiz MC</button>
+            <button onClick={() => addSlide('info')} style={{ ...GHOST, width: '100%', marginTop: 4, fontSize: 11 }}>+ Info</button>
+          </div>
+
+          {/* Slide editor */}
+          <div style={{ flex: 1, ...CARD, borderRadius: 14, padding: '1.25rem', minHeight: 360 }}>
+            {!slide ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 300, color: C.text3, fontSize: 13 }}>
+                Select or add a slide
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Type + delete */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {[{id:'story',label:'Story'},{id:'story_choice',label:'Choice'},{id:'open_question',label:'Open Q'},{id:'multiple_choice',label:'Quiz MC'},{id:'info',label:'Info'}].map(t => (
+                    <button key={t.id} onClick={() => updateSlide(editingSlide, 'type', t.id)}
+                      style={{ ...GHOST, fontSize: 11, padding: '4px 10px', borderColor: slide.type === t.id ? C.text3 : C.border, color: slide.type === t.id ? C.text : C.text2 }}>
+                      {t.label}
+                    </button>
+                  ))}
+                  <button onClick={() => deleteSlide(editingSlide)} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 12, fontFamily: 'inherit' }}>
+                    Delete slide
+                  </button>
+                </div>
+
+                {/* Question / Content */}
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 5 }}>
+                    {slide.type === 'info' ? 'Content' : slide.type === 'story' ? 'Narration' : 'Question'}
+                  </label>
+                  <textarea value={slide.question} onChange={e => updateSlide(editingSlide, 'question', e.target.value)}
+                    placeholder={
+                      slide.type === 'info' ? 'Information for students...' :
+                      slide.type === 'story' ? 'Write the story narration here...' :
+                      slide.type === 'story_choice' ? 'What should the protagonist do?' :
+                      slide.type === 'open_question' ? 'How would you feel if...?' :
+                      'What is the correct form of...?'
+                    }
+                    rows={slide.type === 'story' ? 5 : 3}
+                    style={{ width: '100%', background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', color: C.text, fontSize: 14, fontFamily: 'inherit', resize: 'none', outline: 'none' }} />
+                </div>
+
+                {/* Options — MC */}
+                {slide.type === 'multiple_choice' && (
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 5 }}>
+                      Options <span style={{ fontWeight: 400, fontSize: 10 }}>(tap the letter to mark correct)</span>
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      {(slide.options || ['','','','']).map((opt, oi) => (
+                        <div key={oi} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button onClick={() => updateSlide(editingSlide, 'correct_answer', slide.correct_answer === oi ? null : oi)}
+                            style={{ width: 28, height: 28, borderRadius: 6, border: 'none', cursor: 'pointer', background: slide.correct_answer === oi ? OPT_COLORS[oi] : 'rgba(240,236,224,0.1)', color: '#fff', fontWeight: 900, fontSize: 13, flexShrink: 0, fontFamily: 'inherit' }}>
+                            {String.fromCharCode(65 + oi)}
+                          </button>
+                          <input value={opt} onChange={e => updateOption(editingSlide, oi, e.target.value)}
+                            placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                            style={{ flex: 1, background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 7, padding: '6px 10px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Options + branch targets — story_choice */}
+                {slide.type === 'story_choice' && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3 }}>
+                        Options <span style={{ fontWeight: 400 }}>— branch target per option</span>
+                      </label>
+                      <button onClick={() => createBranches(editingSlide)}
+                        style={{ ...GHOST, fontSize: 10, padding: '3px 10px', color: C.text3 }}
+                        title="Inserts one Story slide per filled option and wires up branch targets automatically">
+                        ✦ Create branches
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(slide.options || ['','','','']).map((opt, oi) => (
+                        <div key={oi} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <span style={{ width: 28, height: 28, borderRadius: 6, background: OPT_COLORS[oi], color: '#fff', fontWeight: 900, fontSize: 13, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>
+                            {String.fromCharCode(65 + oi)}
+                          </span>
+                          <input value={opt} onChange={e => updateOption(editingSlide, oi, e.target.value)}
+                            placeholder={`Option ${String.fromCharCode(65 + oi)}`}
+                            style={{ flex: 1, background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 7, padding: '6px 10px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                          <select value={slide.branch_targets?.[oi] ?? ''}
+                            onChange={e => updateBranchTarget(editingSlide, oi, e.target.value)}
+                            style={{ background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 7, padding: '6px 8px', color: C.text2, fontSize: 11, fontFamily: 'inherit', outline: 'none', width: 96 }}>
+                            <option value="">→ Next</option>
+                            {editDeck.slides.map((_, si) => (
+                              <option key={si} value={si}>→ Slide {si + 1}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Timer — only for timed types */}
+                {['multiple_choice','story_choice'].includes(slide.type) && (
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 5 }}>Timer</label>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[0,15,30,60,90].map(t => (
+                        <button key={t} onClick={() => updateSlide(editingSlide, 'time_limit', t)}
+                          style={{ ...GHOST, fontSize: 11, padding: '4px 10px', borderColor: slide.time_limit === t ? C.text3 : C.border, color: slide.time_limit === t ? C.text : C.text2 }}>
+                          {t === 0 ? 'No limit' : `${t}s`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Image URL */}
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 5 }}>Image URL <span style={{ fontWeight: 400 }}>(optional)</span></label>
+                  <input type="url" value={slide.image_url || ''} onChange={e => updateSlide(editingSlide, 'image_url', e.target.value || null)}
+                    placeholder="https://..."
+                    style={{ width: '100%', background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 10px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                  {slide.image_url && (
+                    <img src={slide.image_url} alt="" onError={e => e.target.style.display='none'}
+                      style={{ marginTop: 8, width: '100%', maxHeight: 160, objectFit: 'cover', borderRadius: 8, border: `1px solid ${C.border}` }} />
+                  )}
+                </div>
+
+                {/* YouTube URL */}
+                <div>
+                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 5 }}>YouTube URL <span style={{ fontWeight: 400 }}>(optional)</span></label>
+                  <input type="url" value={slide.video_url || ''} onChange={e => updateSlide(editingSlide, 'video_url', e.target.value || null)}
+                    placeholder="https://youtube.com/watch?v=..."
+                    style={{ width: '100%', background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 10px', color: C.text, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                  {getYouTubeId(slide.video_url) && (
+                    <div style={{ marginTop: 8, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+                      <iframe src={`https://www.youtube.com/embed/${getYouTubeId(slide.video_url)}`}
+                        style={{ width: '100%', height: 160, border: 'none', display: 'block' }}
+                        allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick insert after this slide */}
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: '0.75rem' }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 6 }}>Insert after this slide</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[{type:'story',label:'Story ↓'},{type:'story_choice',label:'Choice ↓'},{type:'open_question',label:'Open Q ↓'},{type:'multiple_choice',label:'Quiz MC ↓'},{type:'info',label:'Info ↓'}].map(t => (
+                      <button key={t.type} onClick={() => addSlideAfter(editingSlide, t.type)}
+                        style={{ ...GHOST, fontSize: 11, padding: '4px 10px' }}>
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── PREVIEW ──────────────────────────────────────────────────────
+  if (sub === 'preview' && editDeck) {
+    const pvSlide = editDeck.slides[previewSlide];
+    const pvTotal = editDeck.slides.length;
+    const TYPE_LABELS_PV = {story:'Story',story_choice:'Choose your path',open_question:'Open question',info:'Information',multiple_choice:`Question ${previewSlide + 1} of ${pvTotal}`};
+
+    return (
+      <div style={{ maxWidth: 780, width: '100%' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <button onClick={() => setSub('editor')} style={{ ...GHOST, flexShrink: 0 }}>← Editor</button>
+          <p style={{ fontSize: 13, color: C.text2, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editDeck.title}</p>
+          <button onClick={() => setPreviewSlide(p => Math.max(0, p - 1))} disabled={previewSlide === 0} style={{ ...GHOST, opacity: previewSlide === 0 ? 0.35 : 1 }}>← Prev</button>
+          <span style={{ fontSize: 12, color: C.text3, minWidth: 54, textAlign: 'center' }}>{previewSlide + 1} / {pvTotal}</span>
+          <button onClick={() => setPreviewSlide(p => Math.min(pvTotal - 1, p + 1))} disabled={previewSlide === pvTotal - 1} style={{ ...GHOST, opacity: previewSlide === pvTotal - 1 ? 0.35 : 1 }}>Next →</button>
+        </div>
+
+        {/* Slide pills */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: '1.25rem', overflowX: 'auto', paddingBottom: 4 }}>
+          {editDeck.slides.map((s, i) => (
+            <button key={s.id} onClick={() => setPreviewSlide(i)}
+              style={{ flexShrink: 0, padding: '3px 10px', borderRadius: 20, border: `1px solid ${i === previewSlide ? C.text : C.border}`, background: i === previewSlide ? 'rgba(240,236,224,0.08)' : 'transparent', cursor: 'pointer', fontSize: 10, fontWeight: 700, color: i === previewSlide ? C.text : C.text3, fontFamily: 'inherit', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              {({story:'S',story_choice:'C',open_question:'O',info:'I',multiple_choice:'Q'})[s.type] || '?'}{i + 1}
+            </button>
+          ))}
+        </div>
+
+        {/* Phone frame */}
+        <div style={{ maxWidth: 390, margin: '0 auto', background: '#0d0b08', border: `2px solid ${C.border}`, borderRadius: 36, padding: '2rem 1.5rem 2.5rem', minHeight: 560, display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 0 0 6px rgba(240,236,224,0.03)' }}>
+          {pvSlide ? (
+            <>
+              {/* Progress dots */}
+              <div style={{ display: 'flex', gap: 4, width: '100%', marginBottom: '1.5rem' }}>
+                {editDeck.slides.map((_, i) => (
+                  <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i < previewSlide ? 'rgba(240,236,224,0.25)' : i === previewSlide ? '#f0ece0' : 'rgba(240,236,224,0.1)' }} />
+                ))}
+              </div>
+
+              {/* Type label */}
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'rgba(240,236,224,0.3)', marginBottom: '1rem', textAlign: 'center' }}>
+                {TYPE_LABELS_PV[pvSlide.type] || pvSlide.type}
+              </p>
+
+              {/* Media */}
+              {pvSlide.image_url && (
+                <img src={pvSlide.image_url} alt="" style={{ width: '100%', maxHeight: 170, objectFit: 'cover', borderRadius: 12, marginBottom: '1rem', border: '1px solid rgba(240,236,224,0.1)' }} />
+              )}
+              {!pvSlide.image_url && getYouTubeId(pvSlide.video_url) && (
+                <div style={{ width: '100%', borderRadius: 12, overflow: 'hidden', marginBottom: '1rem', border: '1px solid rgba(240,236,224,0.1)' }}>
+                  <iframe src={`https://www.youtube.com/embed/${getYouTubeId(pvSlide.video_url)}`}
+                    style={{ width: '100%', height: 170, border: 'none', display: 'block' }}
+                    allow="accelerometer;autoplay;encrypted-media;picture-in-picture" allowFullScreen />
+                </div>
+              )}
+
+              {/* Story / Info: large text */}
+              {(pvSlide.type === 'story' || pvSlide.type === 'info') && (
+                <p style={{ fontSize: 15, fontWeight: pvSlide.type === 'story' ? 400 : 500, color: '#f0ece0', lineHeight: 1.65, textAlign: 'center', maxWidth: 320 }}>
+                  {pvSlide.question || <span style={{ color: 'rgba(240,236,224,0.2)' }}>No text yet</span>}
+                </p>
+              )}
+
+              {/* Question-based types */}
+              {['story_choice','multiple_choice','open_question'].includes(pvSlide.type) && (
+                <>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: '#f0ece0', textAlign: 'center', marginBottom: '1.5rem', lineHeight: 1.35, maxWidth: 320 }}>
+                    {pvSlide.question || <span style={{ color: 'rgba(240,236,224,0.2)' }}>No question yet</span>}
+                  </p>
+
+                  {/* Choice / MC buttons */}
+                  {(pvSlide.type === 'story_choice' || pvSlide.type === 'multiple_choice') && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', width: '100%' }}>
+                      {(pvSlide.options || []).filter(o => o).map((opt, oi) => (
+                        <div key={oi} style={{ background: 'transparent', border: `2px solid ${OPT_COLORS[oi % OPT_COLORS.length]}`, borderRadius: 12, padding: '0.85rem 0.7rem', fontSize: 13, fontWeight: 600, color: '#f0ece0', textAlign: 'center', lineHeight: 1.3 }}>
+                          {opt}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Open question box */}
+                  {pvSlide.type === 'open_question' && (
+                    <div style={{ width: '100%', background: 'rgba(240,236,224,0.04)', border: '1px solid rgba(240,236,224,0.1)', borderRadius: 12, padding: '0.9rem 1rem', fontSize: 14, color: 'rgba(240,236,224,0.25)', fontFamily: 'inherit', minHeight: 110, boxSizing: 'border-box' }}>
+                      Write your answer...
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <p style={{ color: 'rgba(240,236,224,0.2)', fontSize: 13, margin: 'auto' }}>No slides yet</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── SESSION HOST ─────────────────────────────────────────────────
+  if (sub === 'host' && session) {
+    const isWaiting = session.status === 'waiting';
+    const isActive  = session.status === 'active';
+    const isEnded   = session.status === 'ended';
+    const idx       = session.current_slide_index;
+    const total     = sessionSlides.length;
+    const slide     = sessionSlides[idx];
+    const slideLink = `https://dilo.club/app/session.html?code=${session.code}`;
+    const slideResponses = responses.filter(r => r.slide_id === slide?.id);
+    const isVoteType = ['multiple_choice','story_choice'].includes(slide?.type);
+    const optCounts = isVoteType
+      ? (slide.options || []).map((_, oi) => slideResponses.filter(r => r.answer === String(oi)).length)
+      : [];
+    const TYPE_LABELS = {story:'Story',story_choice:'Choice',open_question:'Open Question',info:'Info',multiple_choice:'Quiz MC'};
+
+    return (
+      <div style={{ maxWidth: 780, width: '100%' }}>
+        {isEnded && <button onClick={() => { setSub('list'); setSession(null); loadDecks(); }} style={{ ...GHOST, marginBottom: '1rem' }}>← Back</button>}
+
+        {/* Code banner */}
+        <div style={{ ...CARD, borderRadius: 16, padding: '1.25rem 1.5rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
+          <div>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.text3, marginBottom: 4 }}>Code</p>
+            <p style={{ fontSize: 44, fontWeight: 900, letterSpacing: '0.18em', color: C.text, lineHeight: 1 }}>{session.code}</p>
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.text3, marginBottom: 4 }}>Session link</p>
+            <p style={{ fontSize: 12, color: C.text2, marginBottom: 6, wordBreak: 'break-all' }}>dilo.club/app/session.html?code={session.code}</p>
+            <button onClick={() => navigator.clipboard?.writeText(slideLink)} style={{ ...GHOST, fontSize: 11, padding: '4px 12px' }}>Copy link</button>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.text3, marginBottom: 4 }}>Connected</p>
+            <p style={{ fontSize: 40, fontWeight: 900, color: C.text, lineHeight: 1 }}>{participants.length}</p>
+          </div>
+        </div>
+
+        {/* Waiting room */}
+        {isWaiting && (
+          <div style={{ ...CARD, borderRadius: 14, padding: '1.25rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: C.text2 }}>Waiting room — {participants.length} connected</p>
+              <button onClick={() => setStatus('active')} disabled={participants.length === 0} style={{ ...BTN, opacity: participants.length === 0 ? 0.4 : 1 }}>▶ Start session</button>
+            </div>
+            {participants.length === 0
+              ? <p style={{ fontSize: 13, color: C.text3 }}>Waiting for students to join with the link...</p>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {participants.map(p => <span key={p.id} style={{ background: 'rgba(240,236,224,0.07)', border: `1px solid ${C.border}`, borderRadius: 20, padding: '4px 12px', fontSize: 13, color: C.text }}>{p.name}</span>)}
+                </div>
+            }
+          </div>
+        )}
+
+        {/* Active slide control */}
+        {isActive && slide && (
+          <div style={{ ...CARD, borderRadius: 14, padding: '1.25rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: 8 }}>
+              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3 }}>
+                Slide {idx + 1} / {total} · {TYPE_LABELS[slide.type] || slide.type}
+              </p>
+              {slide.type !== 'story' && slide.type !== 'info' && (
+                <p style={{ fontSize: 12, color: C.text2 }}>{slideResponses.length} / {participants.length} responses</p>
+              )}
+            </div>
+
+            {slide.image_url && (
+              <img src={slide.image_url} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 10, marginBottom: '0.75rem', border: `1px solid ${C.border}` }} />
+            )}
+            {getYouTubeId(slide.video_url) && (
+              <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: '0.75rem', border: `1px solid ${C.border}` }}>
+                <iframe src={`https://www.youtube.com/embed/${getYouTubeId(slide.video_url)}`}
+                  style={{ width: '100%', height: 180, border: 'none', display: 'block' }}
+                  allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+              </div>
+            )}
+
+            <p style={{ fontSize: slide.type === 'story' ? 15 : 16, fontWeight: slide.type === 'story' ? 400 : 700, color: C.text, marginBottom: '1rem', lineHeight: 1.5 }}>
+              {slide.question || '—'}
+            </p>
+
+            {/* Vote bars — MC and story_choice */}
+            {isVoteType && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: '1.25rem' }}>
+                {(slide.options || []).filter(o => o).map((opt, oi) => {
+                  const count = optCounts[oi] || 0;
+                  const pct   = participants.length > 0 ? Math.round((count / participants.length) * 100) : 0;
+                  const isCor = slide.type === 'multiple_choice' && slide.correct_answer === oi;
+                  const branchTarget = slide.branch_targets?.[oi];
+                  return (
+                    <div key={oi} style={{ background: `${OPT_COLORS[oi]}18`, border: `1px solid ${isCor ? OPT_COLORS[oi] : 'transparent'}`, borderRadius: 10, padding: '10px 12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <span style={{ fontSize: 12, color: OPT_COLORS[oi], fontWeight: 700 }}>{opt}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{count}</span>
+                      </div>
+                      {slide.type === 'story_choice' && branchTarget != null && (
+                        <p style={{ fontSize: 10, color: C.text3, marginBottom: 3 }}>→ Slide {branchTarget + 1}</p>
+                      )}
+                      <div style={{ height: 4, background: 'rgba(240,236,224,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: OPT_COLORS[oi], borderRadius: 2, transition: 'width 0.4s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Open question feed */}
+            {slide.type === 'open_question' && (
+              <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {slideResponses.length === 0
+                  ? <p style={{ fontSize: 13, color: C.text3 }}>Waiting for responses...</p>
+                  : slideResponses.map(r => (
+                      <div key={r.id} style={{ background: 'rgba(240,236,224,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
+                        <p style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{r.answer}</p>
+                      </div>
+                    ))
+                }
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => advanceSlide(idx - 1)} disabled={idx === 0} style={{ ...GHOST, opacity: idx === 0 ? 0.35 : 1 }}>← Previous</button>
+              {slide.type === 'story_choice'
+                ? <button onClick={advanceToWinner} style={BTN}>Advance to winner →</button>
+                : idx < total - 1
+                  ? <button onClick={() => advanceSlide(idx + 1)} style={BTN}>Next →</button>
+                  : <button onClick={() => setStatus('ended')} style={{ ...BTN, background: C.red }}>End session</button>
+              }
+              {slide.type === 'story_choice' && idx < total - 1 && (
+                <button onClick={() => advanceSlide(idx + 1)} style={{ ...GHOST, fontSize: 12 }}>Skip →</button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Participants during active session */}
+        {isActive && (
+          <div style={{ ...CARD, borderRadius: 12, padding: '0.9rem 1.1rem' }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, marginBottom: 6 }}>Participants</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {participants.map(p => <span key={p.id} style={{ background: 'rgba(240,236,224,0.05)', borderRadius: 20, padding: '3px 10px', fontSize: 12, color: C.text2 }}>{p.name}</span>)}
+            </div>
+          </div>
+        )}
+
+        {/* Ended */}
+        {isEnded && (
+          <div style={{ ...CARD, borderRadius: 14, padding: '2.5rem', textAlign: 'center' }}>
+            <p style={{ fontSize: 28, fontWeight: 900, color: C.text, marginBottom: 8 }}>Session ended</p>
+            <p style={{ fontSize: 14, color: C.text2 }}>{participants.length} participants · {total} slides</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 const VIEW_TITLES = {
   dashboard:          "Dashboard",
   calendario:         "Calendar",
   feedbacks:          "FeedbackHub",
+  "new-class-feedback": "FeedbackHub",
   "send-feedback":    "FeedbackHub",
   "class-feedback":   "FeedbackHub",
   "student-feedback": "FeedbackHub",
@@ -3621,6 +5156,7 @@ const VIEW_TITLES = {
   tps:                "Training & Practice",
   "dilo-coach":       "Prep Class",
   "dilo-student":     "Prep Class",
+  "next-classes":     "Next Classes",
   estudiantes:        "Attendance",
   coaches:            "Coaches",
   "my-hours":         "My Hours",
@@ -3631,6 +5167,9 @@ const VIEW_TITLES = {
   "perfil-me":        "Profile",
   "kyc-coach":        "Settings",
   settings:           "Settings",
+  "class-recaps":     "Class Recaps",
+  whatsapp:           "WhatsApp",
+  dinamicas:          "Dynamic Class",
 };
 
 // ── STUDENTS VIEW ──────────────────────────────────────────────
@@ -3896,11 +5435,12 @@ function StudentsView() {
       <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.25rem", flexWrap:"wrap" }}>
         <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", flex:1, minWidth:200 }}>
           <button onClick={() => !atMin && setMOffset(p => p-1)}
-            style={SEL({ padding:"0.4rem 0.7rem", flexShrink:0, opacity: atMin ? 0.25 : 1, cursor: atMin ? "default" : "pointer" })}>←</button>
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor: atMin ? "default" : "pointer", lineHeight:1, flexShrink:0, opacity: atMin ? 0.25 : 1 }}>‹</button>
           <span style={{ fontSize:13, fontWeight:700, color:C.text, flex:1, textAlign:"center" }}>
             {STU_MONTH_NAMES[month-1]} {year}
           </span>
-          <button onClick={() => setMOffset(p => p+1)} style={SEL({ padding:"0.4rem 0.7rem", flexShrink:0 })}>→</button>
+          <button onClick={() => setMOffset(p => p+1)}
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>›</button>
         </div>
         <div style={{ display:"flex", gap:4, flexShrink:0 }}>
           {[["all","All"],["15","Day 15"],["30","Day 30"]].map(([v,l]) => (
@@ -3940,10 +5480,8 @@ function StudentsView() {
       {error && <p style={{ color:"#d95f5f", fontSize:13, marginBottom:"1rem" }}>{error}</p>}
 
       {loading && !students && (
-        <div style={{ ...CARD, borderRadius:14, padding:"3rem", textAlign:"center" }}>
-          <div style={{ display:"flex", justifyContent:"center", gap:6, marginBottom:8 }}>
-            {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}
-          </div>
+        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", padding:"3rem 0", gap:6, width:"100%" }}>
+          {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}
         </div>
       )}
 
@@ -4380,15 +5918,17 @@ function MyHoursView({ user }) {
 
       {/* Month nav */}
       <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.5rem", maxWidth:600 }}>
-        <button onClick={()=>setMonthOffset(p=>p-1)} style={SEL({ padding:"0.4rem 0.7rem" })}>←</button>
+        <button onClick={()=>setMonthOffset(p=>p-1)}
+          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>‹</button>
         <span style={{ flex:1, textAlign:"center", fontSize:13, fontWeight:700, color:C.text }}>
           {MO_NAMES[month]} {year}
         </span>
-        <button onClick={()=>setMonthOffset(p=>p+1)} style={SEL({ padding:"0.4rem 0.7rem" })}>→</button>
+        <button onClick={()=>setMonthOffset(p=>p+1)}
+          style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>›</button>
       </div>
 
       {loading && (
-        <div style={{ display:"flex", justifyContent:"center", width:"100%", padding:"2rem 0", gap:8 }}>
+        <div style={{ maxWidth:600, display:"flex", justifyContent:"center", padding:"3rem 0", gap:8 }}>
           {[0,1,2].map(i => (
             <div key={i} style={{ width:8, height:8, borderRadius:"50%", background:C.text3,
               animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />
@@ -4462,10 +6002,15 @@ function CoachesView() {
   const [partialInputs, setPartialInputs] = useState({});  // { coachName: { amount, date } }
   const [finalInputs,   setFinalInputs]   = useState({});  // { coachName: { amount, date } }
   const [paymentSaving, setPaymentSaving] = useState({});  // { coachName: bool }
+  const [receiptPaths,     setReceiptPaths]     = useState({}); // { coach: { partial, final } } paths in storage
+  const [receiptUrls,      setReceiptUrls]      = useState({}); // { coach: { partial, final } } signed URLs
+  const [receiptUploading, setReceiptUploading] = useState({}); // { coach: { partial, final } } bool
 
   const IVA      = 0.02;
   const sym      = "₡";
-  const fmtMoney = n => `₡${Math.round(n).toLocaleString("es-CR")}`;
+  const fmtMoney = n => n < 0
+    ? `-₡${Math.round(-n).toLocaleString("es-CR")}`
+    : `₡${Math.round(n).toLocaleString("es-CR")}`;
 
   // ── Load rates from Supabase ──────────────────────────────────────
   useEffect(() => {
@@ -4553,28 +6098,46 @@ function CoachesView() {
     const reqId = ++monthReqRef.current;
     setLoading(true); setError(null); setMonthEvents(null); setMonthSaved(false);
     setPartialInputs({}); setFinalInputs({});
+    setReceiptPaths({}); setReceiptUrls({});
     const { start, end } = getMonthBounds(offset);
     const ym = yearMonthKey(offset);
     try {
       const [evs, { data: saved }] = await Promise.all([
         fetchEvents(start, end),
         supabase.from("coach_monthly_hours")
-          .select("coach_name, hours, partial_payment, partial_payment_date, final_payment, final_payment_date")
+          .select("coach_name, hours, partial_payment, partial_payment_date, final_payment, final_payment_date, partial_receipt_path, final_receipt_path")
           .eq("year_month", ym),
       ]);
       if (reqId !== monthReqRef.current) return;
       setMonthEvents(evs);
       if (saved?.length) {
-        const hoursMap = {}, partMap = {}, finalMap = {};
+        const hoursMap = {}, partMap = {}, finalMap = {}, rpMap = {};
         saved.forEach(r => {
           hoursMap[r.coach_name] = r.hours;
           partMap[r.coach_name]  = { amount: r.partial_payment ?? "", date: r.partial_payment_date ?? "" };
           finalMap[r.coach_name] = { amount: r.final_payment   ?? "", date: r.final_payment_date   ?? "" };
+          rpMap[r.coach_name]    = { partial: r.partial_receipt_path || null, final: r.final_receipt_path || null };
         });
         setSavedMonthly(hoursMap);
         setPartialInputs(partMap);
         setFinalInputs(finalMap);
         setMonthSaved(true);
+        setReceiptPaths(rpMap);
+        // Generar signed URLs para comprobantes existentes
+        const urlMap = {};
+        await Promise.all(Object.entries(rpMap).map(async ([coach, { partial, final }]) => {
+          urlMap[coach] = { partial: null, final: null };
+          if (partial) {
+            const { data } = await supabase.storage.from("payment-receipts").createSignedUrl(partial, 3600);
+            urlMap[coach].partial = data?.signedUrl || null;
+          }
+          if (final) {
+            const { data } = await supabase.storage.from("payment-receipts").createSignedUrl(final, 3600);
+            urlMap[coach].final = data?.signedUrl || null;
+          }
+        }));
+        if (reqId !== monthReqRef.current) return;
+        setReceiptUrls(urlMap);
       } else {
         setSavedMonthly({});
       }
@@ -4632,23 +6195,73 @@ function CoachesView() {
   };
 
   // ── Save partial + final payments for one coach (shared OK button) ──
+  // Funciona independientemente de "Save Summary": siempre incluye las horas
+  // para que el upsert pueda hacer INSERT si la fila no existe todavía.
   const savePayments = async (coach, currentRows) => {
     setPaymentSaving(prev => ({ ...prev, [coach]: true }));
     const ym  = yearMonthKey(monthOffset);
     const hrs = currentRows.find(r => r.coach === coach)?.classes || 0;
     const p   = partialInputs[coach] || {};
     const f   = finalInputs[coach]   || {};
-    await supabase.from("coach_monthly_hours").upsert(
-      {
-        coach_name: coach, year_month: ym, hours: hrs,
-        partial_payment:      p.amount ? parseFloat(p.amount) : null,
-        partial_payment_date: p.date   || null,
-        final_payment:        f.amount ? parseFloat(f.amount) : null,
-        final_payment_date:   f.date   || null,
-      },
-      { onConflict: "coach_name,year_month" }
-    );
+    try {
+      const { error } = await supabase.from("coach_monthly_hours").upsert(
+        {
+          coach_name: coach, year_month: ym, hours: hrs,
+          partial_payment:      p.amount ? parseFloat(p.amount) : null,
+          partial_payment_date: p.date   || null,
+          final_payment:        f.amount ? parseFloat(f.amount) : null,
+          final_payment_date:   f.date   || null,
+        },
+        { onConflict: "coach_name,year_month" }
+      );
+      if (error) throw error;
+      // Actualizar savedMonthly para que el banner refleje el estado guardado
+      setSavedMonthly(prev => ({ ...prev, [coach]: hrs }));
+      setMonthSaved(true);
+    } catch (e) {
+      console.error("[savePayments]", coach, e.message);
+      setError(`Could not save payment for ${coach}: ${e.message}`);
+    }
     setPaymentSaving(prev => ({ ...prev, [coach]: false }));
+  };
+
+  // ── Upload receipt image to Supabase Storage ─────────────────────
+  const uploadReceipt = async (coach, type, file) => {
+    setReceiptUploading(prev => ({ ...prev, [coach]: { ...(prev[coach]||{}), [type]: true } }));
+    const ext  = file.name.split(".").pop().toLowerCase() || "jpg";
+    const path = `${coach}/${yearMonthKey(monthOffset)}/${type}.${ext}`;
+    const col  = type === "partial" ? "partial_receipt_path" : "final_receipt_path";
+    try {
+      const { error: upErr } = await supabase.storage
+        .from("payment-receipts").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const hrs = (monthEvents || []).filter(ev => ev.coach?.trim() === coach).length;
+      const { error: dbErr } = await supabase.from("coach_monthly_hours").upsert(
+        { coach_name: coach, year_month: yearMonthKey(monthOffset), hours: hrs, [col]: path },
+        { onConflict: "coach_name,year_month" }
+      );
+      if (dbErr) throw dbErr;
+      const { data } = await supabase.storage.from("payment-receipts").createSignedUrl(path, 3600);
+      setReceiptPaths(prev => ({ ...prev, [coach]: { ...(prev[coach]||{}), [type]: path } }));
+      setReceiptUrls(prev  => ({ ...prev, [coach]: { ...(prev[coach]||{}), [type]: data?.signedUrl||null } }));
+    } catch (e) {
+      console.error("[uploadReceipt]", e.message);
+      setError(`Could not upload receipt for ${coach}: ${e.message}`);
+    }
+    setReceiptUploading(prev => ({ ...prev, [coach]: { ...(prev[coach]||{}), [type]: false } }));
+  };
+
+  // ── Delete receipt from Storage + DB ─────────────────────────────
+  const deleteReceipt = async (coach, type) => {
+    const path = receiptPaths[coach]?.[type];
+    if (!path) return;
+    const col = type === "partial" ? "partial_receipt_path" : "final_receipt_path";
+    await supabase.storage.from("payment-receipts").remove([path]);
+    await supabase.from("coach_monthly_hours")
+      .update({ [col]: null })
+      .eq("coach_name", coach).eq("year_month", yearMonthKey(monthOffset));
+    setReceiptPaths(prev => ({ ...prev, [coach]: { ...(prev[coach]||{}), [type]: null } }));
+    setReceiptUrls(prev  => ({ ...prev, [coach]: { ...(prev[coach]||{}), [type]: null } }));
   };
 
   // ── Aggregate events → rows ───────────────────────────────────────
@@ -4707,8 +6320,8 @@ function CoachesView() {
       ? ["Coach","Hrs","Rate / hr","Net","VAT 2%","Total","Partial Pay","Date","Final Pay","Date","Pending"]
       : ["Coach","Hrs","Rate / hr","Net","VAT 2%","Total"];
     const colWidths = monthMode
-      ? [null, 44, 130, 90, 70, 110, 120, 110, 120, 110, 100]
-      : [null, 50, 130, 100, 80, 110];
+      ? [null, 44, 100, 90, 70, 110, 80, 115, 80, 115, 100]
+      : [null, 50, 100, 100, 80, 110];
     return(
     rows.length === 0
       ? <div style={{ ...CARD, padding: "3rem", textAlign: "center" }}>
@@ -4732,7 +6345,7 @@ function CoachesView() {
                 {rows.map((r, i) => {
                   const partial  = parseFloat(partialInputs[r.coach]?.amount) || 0;
                   const final_   = parseFloat(finalInputs[r.coach]?.amount)   || 0;
-                  const pending  = Math.max(0, r.total - partial - final_);
+                  const pending  = r.total - partial - final_;
                   const isPaid   = r.total > 0 && pending === 0;
                   return (
                   <tr key={r.coach} style={{ borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : "none" }}>
@@ -4748,7 +6361,7 @@ function CoachesView() {
                           value={rateInputs[r.coach] ?? ""} placeholder="0.00"
                           onChange={e => handleRateChange(r.coach, e.target.value)}
                           onKeyDown={e => e.key === "Enter" && handleRateBlur(r.coach)}
-                          style={{ ...inputStyle, flex: 1, minWidth: 60 }} />
+                          style={{ ...inputStyle, width: 48, minWidth: 0 }} />
                         <button onClick={() => handleRateBlur(r.coach)} disabled={ratesSaving[r.coach]}
                           style={okBtnStyle(ratesSaving[r.coach])}>
                           {ratesSaving[r.coach] ? "…" : "OK"}
@@ -4765,46 +6378,86 @@ function CoachesView() {
                       {r.total > 0 ? fmtMoney(r.total) : "—"}
                     </td>
                     {monthMode && <>
+                      {/* Partial Pay — monto */}
                       <td style={{ padding: "0.75rem 0.9rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
                           <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>{sym}</span>
                           <input type="number" min="0" step="0.01"
                             value={partialInputs[r.coach]?.amount ?? ""} placeholder="0"
                             onChange={e => setPartialInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), amount: e.target.value } }))}
-                            style={{ ...inputStyle, flex: 1, minWidth: 50 }} />
+                            style={{ ...inputStyle, width: 72, minWidth: 0 }} />
+                        </div>
+                      </td>
+                      {/* Partial Pay — fecha + 📎 + OK */}
+                      <td style={{ padding: "0.75rem 0.9rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
+                          <input type="date" className="dilo-date"
+                            value={partialInputs[r.coach]?.date ?? ""}
+                            onChange={e => setPartialInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), date: e.target.value } }))}
+                            style={{ ...inputStyle, flex: 1, minWidth: 0, boxSizing: "border-box" }} />
+                          {receiptPaths[r.coach]?.partial
+                            ? <>
+                                <button onClick={() => window.open(receiptUrls[r.coach]?.partial, "_blank")}
+                                  title="Ver comprobante"
+                                  style={{ ...okBtnStyle(false), color: C.green, borderColor: C.green+"55", padding:"0.22rem 0.4rem" }}>🖼</button>
+                                <button onClick={() => deleteReceipt(r.coach, "partial")}
+                                  title="Eliminar comprobante"
+                                  style={{ ...okBtnStyle(false), color:"#d95f5f", borderColor:"#d95f5f44", padding:"0.22rem 0.4rem" }}>✕</button>
+                              </>
+                            : <label title="Subir comprobante"
+                                style={{ ...okBtnStyle(receiptUploading[r.coach]?.partial), padding:"0.22rem 0.4rem", cursor:"pointer", display:"flex", alignItems:"center" }}>
+                                {receiptUploading[r.coach]?.partial ? "…" : "📎"}
+                                <input type="file" accept="image/*" style={{ display:"none" }}
+                                  onChange={e => { if (e.target.files[0]) uploadReceipt(r.coach, "partial", e.target.files[0]); e.target.value=""; }} />
+                              </label>
+                          }
                           <button onClick={() => savePayments(r.coach, rows)} disabled={paymentSaving[r.coach]}
                             style={okBtnStyle(paymentSaving[r.coach])}>
                             {paymentSaving[r.coach] ? "…" : "OK"}
                           </button>
                         </div>
                       </td>
-                      <td style={{ padding: "0.75rem 0.9rem" }}>
-                        <input type="date"
-                          value={partialInputs[r.coach]?.date ?? ""}
-                          onChange={e => setPartialInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), date: e.target.value } }))}
-                          style={{ ...inputStyle, width: "100%", minWidth: 0, boxSizing: "border-box", colorScheme: "dark", WebkitAppearance: "none", appearance: "none" }} />
-                      </td>
+                      {/* Final Pay — monto */}
                       <td style={{ padding: "0.75rem 0.9rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
                           <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>{sym}</span>
                           <input type="number" min="0" step="0.01"
                             value={finalInputs[r.coach]?.amount ?? ""} placeholder="0"
                             onChange={e => setFinalInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), amount: e.target.value } }))}
-                            style={{ ...inputStyle, flex: 1, minWidth: 50 }} />
+                            style={{ ...inputStyle, width: 72, minWidth: 0 }} />
+                        </div>
+                      </td>
+                      {/* Final Pay — fecha + 📎 + OK */}
+                      <td style={{ padding: "0.75rem 0.9rem" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
+                          <input type="date" className="dilo-date"
+                            value={finalInputs[r.coach]?.date ?? ""}
+                            onChange={e => setFinalInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), date: e.target.value } }))}
+                            style={{ ...inputStyle, flex: 1, minWidth: 0, boxSizing: "border-box" }} />
+                          {receiptPaths[r.coach]?.final
+                            ? <>
+                                <button onClick={() => window.open(receiptUrls[r.coach]?.final, "_blank")}
+                                  title="Ver comprobante"
+                                  style={{ ...okBtnStyle(false), color: C.green, borderColor: C.green+"55", padding:"0.22rem 0.4rem" }}>🖼</button>
+                                <button onClick={() => deleteReceipt(r.coach, "final")}
+                                  title="Eliminar comprobante"
+                                  style={{ ...okBtnStyle(false), color:"#d95f5f", borderColor:"#d95f5f44", padding:"0.22rem 0.4rem" }}>✕</button>
+                              </>
+                            : <label title="Subir comprobante"
+                                style={{ ...okBtnStyle(receiptUploading[r.coach]?.final), padding:"0.22rem 0.4rem", cursor:"pointer", display:"flex", alignItems:"center" }}>
+                                {receiptUploading[r.coach]?.final ? "…" : "📎"}
+                                <input type="file" accept="image/*" style={{ display:"none" }}
+                                  onChange={e => { if (e.target.files[0]) uploadReceipt(r.coach, "final", e.target.files[0]); e.target.value=""; }} />
+                              </label>
+                          }
                           <button onClick={() => savePayments(r.coach, rows)} disabled={paymentSaving[r.coach]}
                             style={okBtnStyle(paymentSaving[r.coach])}>
                             {paymentSaving[r.coach] ? "…" : "OK"}
                           </button>
                         </div>
                       </td>
-                      <td style={{ padding: "0.75rem 0.9rem" }}>
-                        <input type="date"
-                          value={finalInputs[r.coach]?.date ?? ""}
-                          onChange={e => setFinalInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), date: e.target.value } }))}
-                          style={{ ...inputStyle, width: "100%", minWidth: 0, boxSizing: "border-box", colorScheme: "dark", WebkitAppearance: "none", appearance: "none" }} />
-                      </td>
                       <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap",
-                        color: isPaid ? C.green : pending > 0 ? "#d95f5f" : C.text3 }}>
+                        color: isPaid ? C.green : pending < 0 ? C.amber : "#d95f5f" }}>
                         {r.total > 0 ? (isPaid ? "✓ 0" : fmtMoney(pending)) : "—"}
                       </td>
                     </>}
@@ -4819,7 +6472,7 @@ function CoachesView() {
                   const tPending = rows.reduce((s, r) => {
                     const p = parseFloat(partialInputs[r.coach]?.amount) || 0;
                     const f = parseFloat(finalInputs[r.coach]?.amount)   || 0;
-                    return s + Math.max(0, r.total - p - f);
+                    return s + (r.total - p - f);
                   }, 0);
                   const allPaid = tTotal > 0 && tPending === 0;
                   return (
@@ -4833,7 +6486,7 @@ function CoachesView() {
                     {monthMode && <>
                       <td /><td /><td /><td />
                       <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 900, whiteSpace: "nowrap",
-                        color: allPaid ? C.green : tPending > 0 ? "#d95f5f" : C.text3 }}>
+                        color: allPaid ? C.green : tPending < 0 ? C.amber : "#d95f5f" }}>
                         {tTotal > 0 ? (allPaid ? "✓ 0" : fmtMoney(tPending)) : "—"}
                       </td>
                     </>}
@@ -4849,7 +6502,6 @@ function CoachesView() {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <div style={{ width: "100%", maxWidth: 800 }}>
-
       {/* ── Tab toggle ── */}
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
         {[["week","Week"],["month","Month"]].map(([id, label]) => (
@@ -4869,17 +6521,15 @@ function CoachesView() {
       {tab === "week" && <>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
           <button onClick={() => { const o = weekOffset - 1; setWeekOffset(o); loadWeek(o); }}
-            style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8,
-              padding: "0.4rem 0.75rem", color: C.text2, cursor: "pointer", fontSize: 14, flexShrink: 0 }}>←</button>
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>‹</button>
           <span style={{ fontSize: 13, color: C.text2, fontWeight: 700, flex: 1, textAlign: "center" }}>
             Week {weekNum} · {fmtDate(wStart)} – {fmtDate(wEnd)}, {wEnd.getFullYear()}
           </span>
           <button onClick={() => { const o = weekOffset + 1; setWeekOffset(o); loadWeek(o); }}
-            style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8,
-              padding: "0.4rem 0.75rem", color: C.text2, cursor: "pointer", fontSize: 14, flexShrink: 0 }}>→</button>
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>›</button>
         </div>
 
-        {loading && <div style={{ ...CARD, padding: "3rem", textAlign: "center" }}><Dots /><p style={{ fontSize: 12, color: C.text3 }}>Loading…</p></div>}
+        {loading && <div style={{ ...CARD, padding: "3rem", display:"flex", justifyContent:"center" }}><Dots /></div>}
         {!loading && error && <div style={{ background: "rgba(194,0,0,0.08)", border: "1px solid rgba(194,0,0,0.2)", borderRadius: 12, padding: "1rem 1.25rem", color: C.red, fontSize: 13 }}>{error}</div>}
         {!loading && !error && weekEvents !== null &&
           PayrollTable({ rows: weekRows, totalHrs: totalWeekHrs, emptyMsg: "No classes this week." })}
@@ -4887,52 +6537,17 @@ function CoachesView() {
 
       {/* ══ MES ══ */}
       {tab === "month" && <>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
-          {/* Nav */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flex: 1, minWidth: 200 }}>
-            <button onClick={() => { const o = monthOffset - 1; setMonthOffset(o); loadMonth(o); }}
-              style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8,
-                padding: "0.4rem 0.75rem", color: C.text2, cursor: "pointer", fontSize: 14, flexShrink: 0 }}>←</button>
-            <span style={{ fontSize: 13, color: C.text2, fontWeight: 700, flex: 1, textAlign: "center" }}>
-              {MONTH_NAMES[mMonth]} {mYear}
-            </span>
-            <button onClick={() => { const o = monthOffset + 1; setMonthOffset(o); loadMonth(o); }}
-              style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8,
-                padding: "0.4rem 0.75rem", color: C.text2, cursor: "pointer", fontSize: 14, flexShrink: 0 }}>→</button>
-          </div>
-
-          {/* Save button */}
-          {!loading && !error && monthEvents !== null && monthRows.length > 0 && (
-            <button
-              onClick={() => saveMonthlyHours(monthRows)}
-              disabled={monthSaving}
-              style={{ padding: "0.45rem 1rem", borderRadius: 8, flexShrink: 0,
-                fontSize: 12, fontWeight: 700, fontFamily: "inherit",
-                cursor: monthSaving ? "default" : "pointer",
-                background: C.surface2,
-                color: monthSaved ? C.green : monthSaving ? C.amber : C.text2,
-                border: `1px solid ${monthSaved ? C.green : monthSaving ? C.amber : C.border}`,
-                transition: "all 0.2s" }}>
-              {monthSaving ? "Saving…" : monthSaved ? "✓ Saved" : "Save summary"}
-            </button>
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1.25rem" }}>
+          <button onClick={() => { const o = monthOffset - 1; setMonthOffset(o); loadMonth(o); }}
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>‹</button>
+          <span style={{ fontSize: 13, color: C.text2, fontWeight: 700, flex: 1, textAlign: "center" }}>
+            {MONTH_NAMES[mMonth]} {mYear}
+          </span>
+          <button onClick={() => { const o = monthOffset + 1; setMonthOffset(o); loadMonth(o); }}
+            style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>›</button>
         </div>
 
-        {/* Saved hours banner */}
-        {monthSaved && Object.keys(savedMonthly).length > 0 && (
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-            {Object.entries(savedMonthly).map(([coach, hrs]) => (
-              <div key={coach} style={{ background: "rgba(74,196,128,0.08)", border: "1px solid rgba(74,196,128,0.2)",
-                borderRadius: 8, padding: "0.35rem 0.75rem", display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 11, color: C.green, fontWeight: 700 }}>✓</span>
-                <span style={{ fontSize: 12, color: C.text2 }}>{coach}</span>
-                <span style={{ fontSize: 12, color: C.green, fontWeight: 800 }}>{hrs} hrs</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {loading && <div style={{ ...CARD, padding: "3rem", textAlign: "center" }}><Dots /><p style={{ fontSize: 12, color: C.text3 }}>Loading…</p></div>}
+        {loading && <div style={{ ...CARD, padding: "3rem", display:"flex", justifyContent:"center" }}><Dots /></div>}
         {!loading && error && <div style={{ background: "rgba(194,0,0,0.08)", border: "1px solid rgba(194,0,0,0.2)", borderRadius: 12, padding: "1rem 1.25rem", color: C.red, fontSize: 13 }}>{error}</div>}
         {!loading && !error && monthEvents !== null &&
           PayrollTable({ rows: monthRows, totalHrs: totalMonthHrs, emptyMsg: "No classes this month.", monthMode: true })}
@@ -4946,273 +6561,287 @@ function CoachesView() {
 // Filterable by class subject. Coaches excluded. External students flagged.
 function AttendanceView() {
   const now = new Date();
-  const [year,  setYear]  = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [subject, setSubject] = useState(""); // "" = all classes
+  const [year,   setYear]   = useState(now.getFullYear());
+  const [month,  setMonth]  = useState(now.getMonth() + 1);
+  const [view,   setView]   = useState("overview"); // "overview" | "detail"
+  const [selected, setSelected] = useState(null);
 
-  // Two separate loading flows: subject list + student data
-  const [subjects,     setSubjects]     = useState([]);
-  const [students,     setStudents]     = useState(null);
-  const [totalSessions, setTotalSessions] = useState(0); // only when filtered by subject
-  const [loading,      setLoading]      = useState(false);
-  const [loadingSubj,  setLoadingSubj]  = useState(false);
-  const [error,        setError]        = useState(null);
+  // Overview state
+  const [classes,    setClasses]    = useState([]);
+  const [loadingOv,  setLoadingOv]  = useState(true);
+  const [errorOv,    setErrorOv]    = useState(null);
+
+  // Detail state
+  const [sessions,     setSessions]     = useState([]);
+  const [allStudents,  setAllStudents]  = useState([]);
+  const [loadingDt,    setLoadingDt]    = useState(false);
 
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  // ── Load unique class subjects for the selected month ─────────
-  const loadSubjects = async (y, m) => {
-    setLoadingSubj(true);
-    const start = new Date(y, m - 1, 1).toISOString();
-    const end   = new Date(y, m,     0, 23, 59, 59).toISOString();
+  const toToken = s => s.trim().split("@")[0].split(/[\s_]/)[0].toLowerCase().replace(/\d/g,"");
+  const getTokenSet = str => new Set((str||"").split(/[,;&\/]/).map(toToken).filter(t=>t.length>=3));
+
+  // ── Load overview: Teams events → class list ──────────────────
+  const loadOverview = async (y, m) => {
+    setLoadingOv(true); setErrorOv(null); setClasses([]);
+    const start = new Date(y, m-1, 1).toISOString();
+    const end   = new Date(y, m, 0, 23, 59, 59).toISOString();
     try {
-      const res = await fetch(EDGE_URL, {
-        method: "POST",
-        headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "teams", startDateTime: start, endDateTime: end }),
+      const res  = await fetch(EDGE_URL, {
+        method:"POST", headers:{ Authorization:"Bearer "+ANON_KEY, apikey:ANON_KEY, "Content-Type":"application/json" },
+        body: JSON.stringify({ source:"teams", startDateTime:start, endDateTime:end }),
       });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        const unique = [...new Set(data.map(ev => ev.summary).filter(Boolean))].sort();
-        setSubjects(unique);
+      if (!Array.isArray(data)) throw new Error("Unexpected response");
+
+      const nowTs = new Date();
+      const byClass = {};
+      for (const ev of data) {
+        if (!ev.summary) continue;
+        const evDate = new Date(ev.start);
+        if (evDate > nowTs) continue; // exclude future events
+        if (!byClass[ev.summary]) byClass[ev.summary] = { summary:ev.summary, coach:ev.coach||"Unassigned", count:0, maxStudents:0 };
+        byClass[ev.summary].count++;
+        const cnt = getTokenSet(ev.estudiantes||"").size;
+        byClass[ev.summary].maxStudents = Math.max(byClass[ev.summary].maxStudents, cnt);
       }
-    } catch (e) { console.warn("[loadSubjects]", e.message); }
-    setLoadingSubj(false);
+
+      setClasses(
+        Object.values(byClass)
+          .map(c => ({ ...c, type: c.maxStudents <= 1 ? "Private" : "Group" }))
+          .sort((a,b) => a.summary.localeCompare(b.summary))
+      );
+    } catch(e) { setErrorOv(e.message); }
+    setLoadingOv(false);
   };
 
-  // ── Load all-class student summary ────────────────────────────
-  const loadAllStudents = async (y, m) => {
-    setLoading(true); setError(null); setStudents(null); setTotalSessions(0);
+  // ── Load class detail: attendance per session ─────────────────
+  const loadDetail = async (cls) => {
+    setSelected(cls); setView("detail");
+    setLoadingDt(true); setSessions([]); setAllStudents([]);
     try {
-      const res = await fetch(ATTENDANCE_URL, {
-        method: "POST",
-        headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "student-attendance", year: y, month: m }),
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) setStudents(data);
-      else setError(data.error || "Error loading attendance.");
-    } catch (e) { setError(e.message); }
-    setLoading(false);
-  };
-
-  // ── Load class-history + aggregate per student ────────────────
-  const loadClassStudents = async (y, m, subj) => {
-    setLoading(true); setError(null); setStudents(null);
-    try {
-      const res = await fetch(ATTENDANCE_URL, {
-        method: "POST",
-        headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "class-history", subject: subj, year: y, month: m }),
+      const res  = await fetch(ATTENDANCE_URL, {
+        method:"POST", headers:{ Authorization:"Bearer "+ANON_KEY, apikey:ANON_KEY, "Content-Type":"application/json" },
+        body: JSON.stringify({ source:"class-history", subject:cls.summary, year, month }),
       });
       const data = await res.json();
       if (Array.isArray(data)) {
-        const total = data.length; // sessions in the period
-        setTotalSessions(total);
-        const map = {};
-        for (const session of data) {
-          for (const rec of session.records || []) {
-            const key = rec.email || rec.name;
-            if (!map[key]) map[key] = { name: rec.name, email: rec.email, isExternal: rec.isExternal, sessions: 0, mins: 0 };
-            map[key].sessions++;
-            map[key].mins += Math.round(rec.duration / 60);
-          }
-        }
-        const agg = Object.values(map)
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map(s => ({
-            name:            s.name,
-            email:           s.email,
-            isExternal:      s.isExternal,
-            classCount:      total,
-            sessionsAttended: s.sessions,
-            actualMinutes:   s.mins,
-            expectedMinutes: total * 50,
-            completion:      total > 0 ? Math.round((s.mins / (total * 50)) * 100) : 0,
-          }));
-        setStudents(agg);
-      } else setError(data.error || "Error loading class history.");
-    } catch (e) { setError(e.message); }
-    setLoading(false);
+        // Debug: log raw session data to verify all attendees are present
+        console.group(`[Attendance] ${cls.summary}`);
+        data.forEach((s, i) => {
+          const d = s.date||s.start||s.startTime||`Session ${i+1}`;
+          console.log(`Session ${i+1} (${d}) — ${s.records?.length||0} records:`);
+          console.table((s.records||[]).map(r => ({ email:r.email, name:r.name, duration_s:r.duration, isExternal:r.isExternal })));
+        });
+        console.groupEnd();
+
+        const studentMap = {};
+        data.forEach((session, si) => {
+          (session.records||[]).forEach((rec, ri) => {
+            // Robust key: prefer email, fall back to name, then generate unique id
+            const key = rec.email || rec.name || `attendee_${si}_${ri}`;
+            if (!studentMap[key]) studentMap[key] = {
+              email: rec.email || null,
+              name:  rec.name  || rec.email || key,
+            };
+          });
+        });
+        setAllStudents(Object.values(studentMap).sort((a,b) => (a.email||a.name).localeCompare(b.email||b.name)));
+        setSessions(data);
+      }
+    } catch(e) { console.error(e); }
+    setLoadingDt(false);
   };
 
-  useEffect(() => {
-    loadSubjects(year, month);
-    loadAllStudents(year, month);
-  }, []);
+  useEffect(() => { loadOverview(year, month); }, []);
 
   const changePeriod = (y, m) => {
-    setYear(y); setMonth(m); setSubject(""); setTotalSessions(0);
-    loadSubjects(y, m);
-    loadAllStudents(y, m);
+    setYear(y); setMonth(m); setView("overview"); setSelected(null);
+    loadOverview(y, m);
   };
 
-  const changeSubject = (subj) => {
-    setSubject(subj);
-    if (!subj) loadAllStudents(year, month);
-    else loadClassStudents(year, month, subj);
-  };
-
-  const compColor = p => p >= 80 ? C.green : p >= 50 ? C.amber : C.red;
-
-  // ── Summary stats ─────────────────────────────────────────────
-  const avgCompletion = students?.length
-    ? Math.round(students.reduce((a, s) => a + s.completion, 0) / students.length)
-    : 0;
-  const displaySessions = subject
-    ? totalSessions
-    : students?.length ? students.reduce((max, s) => Math.max(max, s.classCount), 0) : 0;
-
-  // ── Dots loader helper ────────────────────────────────────────
   const Dots = () => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 8 }}>
-      {[0,1,2].map(i => (
-        <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: C.text3,
-          animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />
-      ))}
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:"3rem" }}>
+      {[0,1,2].map(i=><div key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.text3, animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite` }}/>)}
     </div>
   );
 
-  return (
-    <div style={{ width: "100%", maxWidth: 720 }}>
+  const typeBadge = (type) => ({
+    fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:50,
+    letterSpacing:"0.08em", textTransform:"uppercase", flexShrink:0,
+    background: type==="Private" ? "rgba(202,154,4,0.12)" : "rgba(109,181,138,0.12)",
+    color:      type==="Private" ? C.amber : C.green,
+    border:    `1px solid ${type==="Private" ? C.amber+"44" : C.green+"44"}`,
+  });
 
-      {/* ── Controls ── */}
-      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center",
-        marginBottom: "1.25rem", flexWrap: "wrap" }}>
-        <select value={month} onChange={e => changePeriod(year, +e.target.value)} style={SEL()}>
-          {MONTHS.map((lbl, i) => <option key={i} value={i + 1}>{lbl}</option>)}
-        </select>
-        <select value={subject} onChange={e => changeSubject(e.target.value)}
-          style={SEL({ flex: 1, minWidth: 160 })}>
-          <option value="">All Classes</option>
-          {subjects.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {loadingSubj && <span style={{ fontSize: 11, color: C.text3 }}>…</span>}
-      </div>
+  // ── Period selector (shared) ──────────────────────────────────
+  const PeriodBar = () => (
+    <div style={{ display:"flex", gap:"0.5rem", alignItems:"center", marginBottom:"1.5rem" }}>
+      <select value={month} onChange={e=>changePeriod(year,+e.target.value)} style={SEL()}>
+        {MONTHS.map((lbl,i)=><option key={i} value={i+1}>{lbl}</option>)}
+      </select>
+      <select value={year} onChange={e=>changePeriod(+e.target.value,month)} style={SEL()}>
+        {[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}
+      </select>
+    </div>
+  );
 
-      {/* ── Loading ── */}
-      {loading && (
-        <div style={{ ...CARD, padding: "3rem", textAlign: "center" }}>
-          <Dots />
-          <p style={{ fontSize: 12, color: C.text3, marginTop: 4 }}>
-            {subject ? "Fetching class sessions…" : "Loading student attendance…"}
-          </p>
+  // ── DETAIL VIEW ───────────────────────────────────────────────
+  if (view==="detail" && selected) {
+    const recKey = (rec, si, ri) => rec.email || rec.name || `attendee_${si}_${ri}`;
+    const stuKey = (s) => s.email || s.name;
+
+    const getSessionMap = (session, si) => {
+      const map = {};
+      (session.records||[]).forEach((rec, ri) => {
+        map[recKey(rec, si, ri)] = Math.round(rec.duration/60);
+      });
+      return map;
+    };
+    const totals  = {}; const attended = {};
+    for (const s of allStudents) { totals[stuKey(s)]=0; attended[stuKey(s)]=0; }
+    for (const session of sessions) {
+      const smap = getSessionMap(session, sessions.indexOf(session));
+      for (const s of allStudents) {
+        const key = stuKey(s);
+        if (smap[key]!==undefined) { totals[key]+=smap[key]; attended[key]++; }
+      }
+    }
+    const dateOf = session => {
+      const raw = session.date||session.start||session.startTime||null;
+      if (!raw) return null;
+      const d = new Date(raw);
+      return isNaN(d) ? null : d;
+    };
+
+    return (
+      <div style={{ width:"100%", maxWidth:900 }}>
+        <button onClick={()=>setView("overview")}
+          style={{ display:"flex", alignItems:"center", gap:"0.4rem", background:"none", border:"none", cursor:"pointer", color:C.text3, fontSize:12, fontWeight:600, letterSpacing:"0.06em", padding:"0 0 1.25rem 0", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
+          onMouseEnter={e=>e.currentTarget.style.color=C.text2} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Attendance
+        </button>
+
+        <PeriodBar />
+
+        <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", flexWrap:"wrap", marginBottom:"0.4rem" }}>
+          <h2 style={{ fontSize:"clamp(1.1rem,3vw,1.4rem)", fontWeight:900, letterSpacing:"-0.02em", color:C.text }}>{selected.summary}</h2>
+          <span style={typeBadge(selected.type)}>{selected.type}</span>
         </div>
-      )}
+        <p style={{ fontSize:12, color:C.text3, marginBottom:"1.5rem" }}>
+          {MONTHS[month-1]} {year} · <span style={{ color:C.text2, fontWeight:600 }}>{selected.coach}</span> · {sessions.length} sessions
+        </p>
 
-      {/* ── Error ── */}
-      {!loading && error && (
-        <div style={{ background: "rgba(194,0,0,0.08)", border: "1px solid rgba(194,0,0,0.2)",
-          borderRadius: 12, padding: "1rem 1.25rem", color: C.red, fontSize: 13 }}>{error}</div>
-      )}
-
-      {/* ── Data ── */}
-      {!loading && !error && students !== null && (
-        students.length === 0
-          ? <div style={{ ...CARD, padding: "3rem", textAlign: "center" }}>
-              <p style={{ color: C.text3, fontSize: 13 }}>No attendance data for this period.</p>
-            </div>
-          : <>
-              {/* Summary chips */}
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.1rem", flexWrap: "wrap" }}>
-                {[
-                  { label: "Students",  value: students.length },
-                  { label: "Sessions",  value: displaySessions },
-                  { label: "Avg",       value: `${avgCompletion}%` },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{ ...CARD, borderRadius: 10, padding: "0.55rem 1rem",
-                    flex: 1, minWidth: 100, textAlign: "center" }}>
-                    <p style={{ fontSize: 10, color: C.text3, fontWeight: 700,
-                      letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 2 }}>{label}</p>
-                    <p style={{ fontSize: 20, fontWeight: 900, color: C.text,
-                      letterSpacing: "-0.02em" }}>{value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Student cards */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
-                {students.map((s) => {
-                  const col  = compColor(s.completion);
-                  const barW = Math.min(s.completion, 100); // visual bar capped at 100%
+        {loadingDt ? <Dots /> : sessions.length===0 ? (
+          <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center" }}>
+            <p style={{ fontSize:13, color:C.text3 }}>No attendance data for this period.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", borderRadius:12, border:`1px solid ${C.border}` }}>
+            <table style={{ borderCollapse:"collapse", width:"100%", minWidth: 130 + 170*allStudents.length }}>
+              <thead>
+                <tr style={{ background:C.surface2 }}>
+                  <th style={{ position:"sticky", left:0, zIndex:2, background:C.surface2, width:130, minWidth:130, padding:"0.65rem 0.85rem", textAlign:"left", fontSize:10, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", color:C.text3, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border2}` }}>
+                    Session
+                  </th>
+                  {allStudents.map(s=>{
+                    const key   = stuKey(s);
+                    const label = s.email || s.name;
+                    return (
+                      <th key={key} title={label} style={{ width:170, minWidth:170, padding:"0.65rem 0.75rem", textAlign:"center", fontSize:10, fontWeight:700, color:C.text2, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, overflow:"hidden", textOverflow:"ellipsis", maxWidth:170 }}>
+                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:155 }}>{label}</div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((session, si)=>{
+                  const smap  = getSessionMap(session, si);
+                  const d     = dateOf(session);
+                  const label = d ? d.toLocaleDateString("en",{month:"short",day:"numeric",weekday:"short"}) : `Session ${si+1}`;
+                  const rowBg    = si%2===0 ? "transparent" : "rgba(240,236,224,0.02)";
+                  const stickyBg = si%2===0 ? C.bg2 : "rgb(17,15,12)";
                   return (
-                    <div key={s.email || s.name} style={{ ...CARD, borderRadius: 12, padding: "0.85rem 1.1rem" }}>
-                      {/* Row 1: name + badges + % */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem" }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%",
-                          background: col, flexShrink: 0 }} />
-                        <p style={{ fontSize: 13, fontWeight: 700, color: C.text, flex: 1,
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {s.name}
-                        </p>
-                        {s.isExternal && (
-                          <span style={{ fontSize: 9, fontWeight: 800, color: C.text3,
-                            background: "rgba(240,236,224,0.07)", border: `1px solid ${C.border}`,
-                            borderRadius: 4, padding: "1px 5px", letterSpacing: "0.06em",
-                            flexShrink: 0 }}>
-                            EXT
-                          </span>
-                        )}
-                        <p style={{ fontSize: 16, fontWeight: 900, color: col, flexShrink: 0,
-                          letterSpacing: "-0.01em" }}>
-                          {s.completion}%
-                        </p>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div style={{ height: 3, background: "rgba(240,236,224,0.07)",
-                        borderRadius: 2, overflow: "hidden", marginBottom: "0.45rem" }}>
-                        <div style={{ height: "100%", width: `${barW}%`, background: col,
-                          borderRadius: 2, transition: "width 0.5s cubic-bezier(0.4,0,0.2,1)" }} />
-                      </div>
-
-                      {/* Row 2: stats */}
-                      <div style={{ display: "flex", gap: "1.25rem", alignItems: "center" }}>
-                        {subject ? (
-                          // Filtered by class: show sessions attended / total
-                          <span style={{ fontSize: 11, color: C.text3 }}>
-                            <span style={{ color: C.text2, fontWeight: 600 }}>
-                              {s.sessionsAttended}
-                            </span>/{s.classCount} sessions
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 11, color: C.text3 }}>
-                            <span style={{ color: C.text2, fontWeight: 600 }}>{s.classCount}</span> classes
-                          </span>
-                        )}
-                        <span style={{ fontSize: 11, color: C.text3 }}>
-                          <span style={{ color: C.text2, fontWeight: 600 }}>{s.actualMinutes}</span>
-                          /{s.expectedMinutes} min
-                        </span>
-                        {s.completion > 100 && (
-                          <span style={{ fontSize: 10, color: C.green, fontWeight: 700,
-                            letterSpacing: "0.04em" }}>+{s.completion - 100}%</span>
-                        )}
-                      </div>
-                    </div>
+                    <tr key={si} style={{ background:rowBg }}>
+                      <td style={{ position:"sticky", left:0, zIndex:1, background:stickyBg, padding:"0.6rem 0.85rem", fontSize:11, fontWeight:600, color:C.text3, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border2}`, whiteSpace:"nowrap" }}>
+                        {label}
+                      </td>
+                      {allStudents.map(s=>{
+                        const key  = stuKey(s);
+                        const mins = smap[key];
+                        return (
+                          <td key={key} style={{ padding:"0.6rem 0.75rem", textAlign:"center", borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }}>
+                            {mins===undefined
+                              ? <span style={{ fontSize:10, fontWeight:700, color:C.red, letterSpacing:"0.06em", textTransform:"uppercase" }}>No Show</span>
+                              : <span style={{ fontSize:12, fontWeight:600, color:C.text }}>{mins} min</span>
+                            }
+                          </td>
+                        );
+                      })}
+                    </tr>
                   );
                 })}
-              </div>
+                {/* Total row */}
+                <tr style={{ background:"rgba(240,236,224,0.04)" }}>
+                  <td style={{ position:"sticky", left:0, zIndex:1, background:"rgb(20,18,14)", padding:"0.75rem 0.85rem", fontSize:10, fontWeight:800, color:C.text2, letterSpacing:"0.08em", textTransform:"uppercase", borderTop:`2px solid ${C.border2}`, borderRight:`1px solid ${C.border2}`, whiteSpace:"nowrap" }}>
+                    Total
+                  </td>
+                  {allStudents.map(s=>{
+                    const key = stuKey(s);
+                    return (
+                      <td key={key} style={{ padding:"0.75rem", textAlign:"center", borderTop:`2px solid ${C.border2}`, borderRight:`1px solid ${C.border}` }}>
+                        <p style={{ fontSize:13, fontWeight:800, color:C.text, marginBottom:2 }}>{totals[key]} min</p>
+                        <p style={{ fontSize:10, color:C.text3 }}>{attended[key]}/{sessions.length} ses</p>
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
 
-              {/* Legend */}
-              <div style={{ display: "flex", gap: "1rem", marginTop: "1rem",
-                padding: "0.6rem 0", borderTop: `1px solid ${C.border}` }}>
-                {[[C.green, "≥ 80%"], [C.amber, "50–79%"], [C.red, "< 50%"]].map(([col, lbl]) => (
-                  <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: col }} />
-                    <span style={{ fontSize: 11, color: C.text3 }}>{lbl}</span>
-                  </div>
-                ))}
-                <span style={{ fontSize: 11, color: C.text3, marginLeft: "auto" }}>
-                  50 effective min/class
-                </span>
+  // ── OVERVIEW ─────────────────────────────────────────────────
+  return (
+    <div style={{ width:"100%", maxWidth:720 }}>
+      <PeriodBar />
+
+      {loadingOv ? <Dots /> : errorOv ? (
+        <div style={{ background:"rgba(194,0,0,0.08)", border:"1px solid rgba(194,0,0,0.2)", borderRadius:12, padding:"1rem 1.25rem", color:C.red, fontSize:13 }}>{errorOv}</div>
+      ) : classes.length===0 ? (
+        <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center" }}>
+          <p style={{ fontSize:13, color:C.text3 }}>No classes found for this period.</p>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:"0.6rem" }}>
+          {classes.map(cls=>(
+            <button key={cls.summary} onClick={()=>loadDetail(cls)}
+              style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"1rem 1.25rem", cursor:"pointer", textAlign:"left", WebkitTapHighlightColor:"transparent", transition:"background 0.15s" }}
+              onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+              onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
+              <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", marginBottom:"0.4rem" }}>
+                <p style={{ fontSize:14, fontWeight:700, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cls.summary}</p>
+                <span style={typeBadge(cls.type)}>{cls.type}</span>
               </div>
-            </>
+              <div style={{ display:"flex", gap:"1.25rem", alignItems:"center" }}>
+                <p style={{ fontSize:11, color:C.text3 }}>Coach: <span style={{ color:C.text2, fontWeight:600 }}>{cls.coach}</span></p>
+                <p style={{ fontSize:11, color:C.text3 }}><span style={{ color:C.text2, fontWeight:600 }}>{cls.count}</span> sessions</p>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" style={{ marginLeft:"auto", flexShrink:0 }}><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
+// ── PLACEHOLDER (eliminado — reemplazado por AttendanceView rediseñado) ──
 // ── CLASS PREP VIEW (Dilo Coach GEM) ──────────────────────────
 const CLASS_PREP_SYSTEM = `You are a class design assistant for DILO Club coaches. Your job is to:
 - Design conversation-based English classes
@@ -5570,12 +7199,658 @@ function ClassPrepView() {
   );
 }
 
+// ── CLASS RECAPS VIEW ──────────────────────────────────────────
+// Costa Rica is always UTC-6 (no DST)
+function crToday() {
+  return new Date(Date.now() - 6 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function timeToMinutes(t) {
+  if (!t) return 0;
+  const s = t.trim().toUpperCase();
+  const m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (!m) return 0;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (m[3] === "PM" && h !== 12) h += 12;
+  if (m[3] === "AM" && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+function normalizeTime(t) {
+  if (!t) return t;
+  return t.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+// ── WHATSAPP VIEW ──────────────────────────────────────────────
+const WA_TEMPLATES = [
+  {
+    name: "hello_world",
+    label: "Hello World (test)",
+    language: "en_US",
+    params: [],
+    description: "Default Meta test template.",
+    category: "test",
+  },
+];
+
+const WA_STATUS_COLOR = { sent: C.green, failed: C.red, pending: C.text2 };
+
+function WhatsAppView({ user, role }) {
+  const [tab, setTab]           = useState("send");
+  const [template, setTemplate] = useState(WA_TEMPLATES[0].name);
+  const [toPhone, setToPhone]   = useState("");
+  const [params, setParams]     = useState([]);
+  const [sending, setSending]   = useState(false);
+  const [sendOk, setSendOk]     = useState(false);
+  const [sendErr, setSendErr]   = useState("");
+
+  const [history, setHistory]     = useState([]);
+  const [loadingHist, setLoadingHist] = useState(false);
+  const [histErr, setHistErr]     = useState("");
+
+  const [inbox, setInbox]           = useState([]);
+  const [loadingInbox, setLoadingInbox] = useState(false);
+  const [inboxErr, setInboxErr]     = useState("");
+  const [unread, setUnread]         = useState(0);
+
+  const tpl = WA_TEMPLATES.find(t => t.name === template) || WA_TEMPLATES[0];
+
+  useEffect(() => {
+    setParams(tpl.params.map(() => ""));
+  }, [template]);
+
+  async function handleSend() {
+    if (!toPhone.trim()) { setSendErr("Enter a phone number."); return; }
+    setSending(true); setSendOk(false); setSendErr("");
+    try {
+      const res = await fetch(WHATSAPP_URL, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "send",
+          to: toPhone.trim(),
+          template: tpl.name,
+          language: tpl.language,
+          params,
+          category: tpl.category,
+        }),
+      });
+      const d = await res.json();
+      if (d.failed > 0) {
+        setSendErr(d.results[0]?.error || "Failed to send.");
+      } else {
+        setSendOk(true);
+        setToPhone("");
+        setParams(tpl.params.map(() => ""));
+        setTimeout(() => setSendOk(false), 3000);
+      }
+    } catch (e) {
+      setSendErr(e.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function fetchHistory() {
+    setLoadingHist(true); setHistErr("");
+    try {
+      const res = await fetch(WHATSAPP_URL, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "history", limit: 50 }),
+      });
+      const d = await res.json();
+      if (d.error) { setHistErr(d.error); return; }
+      setHistory(d.messages || []);
+    } catch (e) {
+      setHistErr(e.message);
+    } finally {
+      setLoadingHist(false);
+    }
+  }
+
+  async function fetchInbox() {
+    setLoadingInbox(true); setInboxErr("");
+    try {
+      const { data, error } = await supabase
+        .from("whatsapp_inbox")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      const msgs = data || [];
+      setInbox(msgs);
+      setUnread(msgs.filter(m => !m.is_read).length);
+    } catch (e) {
+      setInboxErr(e.message);
+    } finally {
+      setLoadingInbox(false);
+    }
+  }
+
+  async function markAllRead() {
+    await supabase.from("whatsapp_inbox").update({ is_read: true }).eq("is_read", false);
+    setInbox(prev => prev.map(m => ({ ...m, is_read: true })));
+    setUnread(0);
+  }
+
+  useEffect(() => {
+    if (tab === "history") fetchHistory();
+    if (tab === "inbox")   fetchInbox();
+  }, [tab]);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel("whatsapp_inbox_realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_inbox" }, p => {
+        setInbox(prev => [p.new, ...prev]);
+        setUnread(n => n + 1);
+      })
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, []);
+
+  const card = { background: C.card, borderRadius: 14, padding: "1.5rem", marginBottom: "1rem" };
+  const label = { display: "block", fontSize: 12, color: C.text2, marginBottom: 6, fontWeight: 600, letterSpacing: "0.04em" };
+  const input = {
+    width: "100%", padding: "0.55rem 0.75rem", borderRadius: 8, border: `1.5px solid ${C.border}`,
+    background: C.bg, color: C.text, fontSize: 14, outline: "none",
+  };
+  const tabBtn = (id) => ({
+    padding: "0.45rem 1.1rem", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+    background: tab === id ? C.amber : "transparent",
+    color: tab === id ? "#000" : C.text2,
+  });
+
+  return (
+    <div style={{ padding: "1.5rem", maxWidth: 680, margin: "0 auto" }}>
+      <p style={{ color: C.text2, fontSize: 13, marginBottom: "1.25rem" }}>
+        Send WhatsApp messages to students and coaches via Meta Cloud API.
+      </p>
+
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 6, marginBottom: "1.25rem" }}>
+        <button style={tabBtn("send")}    onClick={() => setTab("send")}>Send Message</button>
+        <button style={tabBtn("history")} onClick={() => setTab("history")}>History</button>
+        <button style={{ ...tabBtn("inbox"), position: "relative" }} onClick={() => setTab("inbox")}>
+          Inbox
+          {unread > 0 && (
+            <span style={{
+              position: "absolute", top: -6, right: -6,
+              background: C.red, color: "#fff", fontSize: 10, fontWeight: 700,
+              borderRadius: "50%", width: 16, height: 16,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>{unread}</span>
+          )}
+        </button>
+      </div>
+
+      {/* ── SEND TAB ── */}
+      {tab === "send" && (
+        <div style={card}>
+          <div style={{ marginBottom: "1rem" }}>
+            <span style={label}>Template</span>
+            <select value={template} onChange={e => setTemplate(e.target.value)} style={input}>
+              {WA_TEMPLATES.map(t => (
+                <option key={t.name} value={t.name}>{t.label}</option>
+              ))}
+            </select>
+            <p style={{ fontSize: 12, color: C.text2, marginTop: 5 }}>{tpl.description}</p>
+          </div>
+
+          <div style={{ marginBottom: "1rem" }}>
+            <span style={label}>Recipient Phone (with country code)</span>
+            <input
+              style={input}
+              placeholder="+50688887777"
+              value={toPhone}
+              onChange={e => { setToPhone(e.target.value); setSendErr(""); }}
+            />
+          </div>
+
+          {tpl.params.map((pName, i) => (
+            <div key={i} style={{ marginBottom: "1rem" }}>
+              <span style={label}>{pName}</span>
+              <input
+                style={input}
+                value={params[i] || ""}
+                onChange={e => setParams(ps => ps.map((p, j) => j === i ? e.target.value : p))}
+              />
+            </div>
+          ))}
+
+          {sendErr && <p style={{ color: C.red, fontSize: 13, marginBottom: "0.75rem" }}>{sendErr}</p>}
+          {sendOk  && <p style={{ color: C.green, fontSize: 13, marginBottom: "0.75rem" }}>Message sent!</p>}
+
+          <button
+            onClick={handleSend}
+            disabled={sending}
+            style={{
+              padding: "0.6rem 1.5rem", borderRadius: 8, border: "none", cursor: sending ? "not-allowed" : "pointer",
+              background: C.amber, color: "#000", fontWeight: 700, fontSize: 14,
+              opacity: sending ? 0.6 : 1,
+            }}
+          >
+            {sending ? "Sending…" : "Send"}
+          </button>
+
+          <div style={{ marginTop: "1.5rem", padding: "0.85rem", borderRadius: 8, background: C.bg, border: `1px solid ${C.border}` }}>
+            <p style={{ fontSize: 12, color: C.text2, fontWeight: 600, marginBottom: 4 }}>Note — Test mode</p>
+            <p style={{ fontSize: 12, color: C.text2, lineHeight: 1.5 }}>
+              Only numbers added as test recipients in Meta can receive messages right now.
+              Additional templates (class reminders, payment reminders) will be available after
+              Meta approves the business verification (~2 days).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── INBOX TAB ── */}
+      {tab === "inbox" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+            <span style={{ fontSize: 13, color: C.text2 }}>
+              {unread > 0 ? `${unread} unread` : "All caught up"}
+            </span>
+            <div style={{ display: "flex", gap: 8 }}>
+              {unread > 0 && (
+                <button onClick={markAllRead} style={{
+                  padding: "0.3rem 0.8rem", borderRadius: 6, border: `1px solid ${C.border}`,
+                  background: "transparent", color: C.text2, fontSize: 12, cursor: "pointer",
+                }}>Mark all read</button>
+              )}
+              <button onClick={fetchInbox} style={{
+                padding: "0.3rem 0.8rem", borderRadius: 6, border: `1px solid ${C.border}`,
+                background: "transparent", color: C.text2, fontSize: 12, cursor: "pointer",
+              }}>Refresh</button>
+            </div>
+          </div>
+          {loadingInbox && <p style={{ color: C.text2, fontSize: 14 }}>Loading…</p>}
+          {inboxErr     && <p style={{ color: C.red,   fontSize: 14 }}>{inboxErr}</p>}
+          {!loadingInbox && !inboxErr && inbox.length === 0 && (
+            <p style={{ color: C.text2, fontSize: 14 }}>No messages received yet.</p>
+          )}
+          {inbox.map(msg => (
+            <div key={msg.id} style={{
+              ...card,
+              borderLeft: msg.is_read ? `3px solid transparent` : `3px solid ${C.amber}`,
+              opacity: msg.is_read ? 0.75 : 1,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+                <div>
+                  <span style={{ fontWeight: 700, fontSize: 14 }}>{msg.from_name || msg.from_phone}</span>
+                  {msg.from_name && (
+                    <span style={{ fontSize: 12, color: C.text2, marginLeft: 8 }}>{msg.from_phone}</span>
+                  )}
+                </div>
+                <span style={{ fontSize: 11, color: C.text2, whiteSpace: "nowrap" }}>
+                  {new Date(msg.created_at).toLocaleString("es-CR", { timeZone: "America/Costa_Rica" })}
+                </span>
+              </div>
+              <p style={{ fontSize: 14, color: C.text, margin: 0, lineHeight: 1.5 }}>{msg.message_body}</p>
+              {msg.message_type !== "text" && (
+                <span style={{ fontSize: 11, color: C.text2, marginTop: 4, display: "block" }}>[{msg.message_type}]</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── HISTORY TAB ── */}
+      {tab === "history" && (
+        <div>
+          {loadingHist && <p style={{ color: C.text2, fontSize: 14 }}>Loading…</p>}
+          {histErr     && <p style={{ color: C.red,   fontSize: 14 }}>{histErr}</p>}
+          {!loadingHist && !histErr && history.length === 0 && (
+            <p style={{ color: C.text2, fontSize: 14 }}>No messages sent yet.</p>
+          )}
+          {history.map(msg => (
+            <div key={msg.id} style={{ ...card, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontWeight: 600, fontSize: 14 }}>{msg.to_phone}</span>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20,
+                  background: (WA_STATUS_COLOR[msg.status] || C.text2) + "22",
+                  color: WA_STATUS_COLOR[msg.status] || C.text2,
+                }}>
+                  {msg.status}
+                </span>
+              </div>
+              <span style={{ fontSize: 12, color: C.text2 }}>
+                {msg.template_name}
+                {msg.params?.length ? ` · ${msg.params.join(", ")}` : ""}
+              </span>
+              {msg.error_message && (
+                <span style={{ fontSize: 12, color: C.red }}>{msg.error_message}</span>
+              )}
+              <span style={{ fontSize: 11, color: C.text2 }}>
+                {new Date(msg.created_at).toLocaleString("es-CR", { timeZone: "America/Costa_Rica" })}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MeetingRecapsView({ user, role }) {
+  const isAdmin = role === "admin";
+  const today   = crToday();
+
+  // ── Register card state (admin only) ──
+  const [regDate,    setRegDate]    = useState(today);
+  const [events,     setEvents]     = useState([]);
+  const [loadingEvs, setLoadingEvs] = useState(false);
+  const [selEvent,   setSelEvent]   = useState("");
+  const [regTime,    setRegTime]    = useState("");
+  const [recapText,  setRecapText]  = useState("");
+  const [saving,     setSaving]     = useState(false);
+  const [saveOk,     setSaveOk]     = useState(false);
+  const [saveErr,    setSaveErr]    = useState("");
+  const [regErrors,  setRegErrors]  = useState({});
+
+  // ── Access card state ──
+  const [accDate,     setAccDate]     = useState(today);
+  const [accTime,     setAccTime]     = useState("All");
+  const [recaps,      setRecaps]      = useState([]);
+  const [loadingAcc,  setLoadingAcc]  = useState(false);
+  const [fetchErr,    setFetchErr]    = useState("");
+  const [expanded,    setExpanded]    = useState({});
+  const [editingId,   setEditingId]   = useState(null);
+  const [editText,    setEditText]    = useState("");
+  const [editSaving,  setEditSaving]  = useState(false);
+  const [editErr,     setEditErr]     = useState("");
+
+  // Fetch Teams events when regDate changes
+  useEffect(() => {
+    if (!isAdmin || !regDate) return;
+    setLoadingEvs(true); setSelEvent(""); setRegTime(""); setEvents([]);
+    fetch(ATTENDANCE_URL, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "calendar-events", date: regDate }),
+    })
+      .then(r => r.json())
+      .then(d => setEvents(d.events || []))
+      .catch(() => setEvents([]))
+      .finally(() => setLoadingEvs(false));
+  }, [regDate, isAdmin]);
+
+  // Graph returns CR local time via Prefer header — parse string directly
+  function handleSelectEvent(subject) {
+    setSelEvent(subject);
+    const ev = events.find(e => e.subject === subject);
+    if (ev?.start) {
+      const timePart = ev.start.slice(11, 16);
+      const [hStr, mStr] = timePart.split(":");
+      const h = parseInt(hStr, 10);
+      const ap = h >= 12 ? "PM" : "AM";
+      const h12 = h % 12 || 12;
+      setRegTime(`${h12}:${mStr} ${ap}`);
+    }
+    setRegErrors(e => ({ ...e, selEvent: false, regTime: false }));
+  }
+
+  async function handleSave() {
+    const errs = {};
+    if (!selEvent)         errs.selEvent  = true;
+    if (!regTime.trim())   errs.regTime   = true;
+    if (!recapText.trim()) errs.recapText = true;
+    setRegErrors(errs);
+    if (Object.keys(errs).length) return;
+    setSaving(true); setSaveErr(""); setSaveOk(false);
+    try {
+      const { error } = await supabase.from("meeting_recaps").insert({
+        class_date: regDate, class_time: normalizeTime(regTime),
+        event_name: selEvent, recap: recapText.trim(), created_by: user?.id || null,
+      });
+      if (error) throw error;
+      setSaveOk(true); setSelEvent(""); setRegTime(""); setRecapText("");
+      setTimeout(() => setSaveOk(false), 4000);
+      if (accDate === regDate) fetchRecaps(regDate);
+    } catch (e) {
+      setSaveErr("Error: " + (e?.message || JSON.stringify(e)));
+    } finally { setSaving(false); }
+  }
+
+  async function fetchRecaps(date) {
+    setLoadingAcc(true); setFetchErr("");
+    const { data, error } = await supabase
+      .from("meeting_recaps").select("*").eq("class_date", date);
+    if (error) {
+      setFetchErr(error.message || JSON.stringify(error));
+      setRecaps([]);
+    } else {
+      const sorted = (data || []).sort((a, b) => timeToMinutes(a.class_time) - timeToMinutes(b.class_time));
+      setRecaps(sorted);
+    }
+    setAccTime("All");
+    setLoadingAcc(false);
+  }
+
+  useEffect(() => { fetchRecaps(accDate); }, [accDate]);
+
+  async function handleEditSave(id) {
+    setEditSaving(true); setEditErr("");
+    const { error } = await supabase.from("meeting_recaps").update({ recap: editText }).eq("id", id);
+    if (error) { setEditErr("Error saving."); setEditSaving(false); return; }
+    setRecaps(rs => rs.map(r => r.id === id ? { ...r, recap: editText } : r));
+    setEditingId(null); setEditSaving(false);
+  }
+
+  // Unique times for filter dropdown, in chronological order
+  // Build unique times keyed by minute value to avoid string format mismatches
+  const timesByMin = {};
+  recaps.forEach(r => {
+    const mins = timeToMinutes(r.class_time);
+    if (!timesByMin[mins]) timesByMin[mins] = r.class_time;
+  });
+  const uniqueTimes = Object.entries(timesByMin)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, label]) => label);
+
+  // Filter by minute value, not by string — immune to format variations
+  const accMins = accTime === "All" ? null : timeToMinutes(accTime);
+  const filtered = accMins === null ? recaps : recaps.filter(r => timeToMinutes(r.class_time) === accMins);
+
+  // Group filtered recaps by time
+  const grouped = filtered.reduce((acc, r) => {
+    const key = r.class_time;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(r);
+    return acc;
+  }, {});
+  const sortedTimes = Object.keys(grouped).sort((a, b) => timeToMinutes(a) - timeToMinutes(b));
+
+  const inputSt = {
+    width: "100%", background: "rgba(240,236,224,0.05)", border: "1px solid rgba(240,236,224,0.1)",
+    borderRadius: 10, color: "rgba(240,236,224,0.9)", fontFamily: "inherit", fontSize: 13,
+    padding: "0.65rem 0.85rem", boxSizing: "border-box", outline: "none", appearance: "none",
+    WebkitAppearance: "none",
+  };
+  const labelSt = { display: "block", fontSize: 11, fontWeight: 600, color: C.text3, marginBottom: "0.4rem", textTransform: "uppercase", letterSpacing: "0.1em" };
+
+  return (
+    <div style={{ maxWidth: 780, width: "100%" }}>
+      <div style={{ marginBottom: "1.75rem" }}>
+        <p style={{ fontSize: 13, color: C.text2 }}>Review AI generated summaries from previous classes.</p>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr", gap: "1.25rem", alignItems: "start" }}>
+
+        {/* ── CARD 1: Register (admin only) ───────────────────────── */}
+        {isAdmin && (
+          <div style={{ ...CARD, borderRadius: 16, padding: "1.5rem" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: C.green, marginBottom: "1.25rem" }}>Register Recap</p>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={labelSt}>Date</label>
+              <input type="date" value={regDate} onChange={e => setRegDate(e.target.value)}
+                style={{ ...inputSt, colorScheme: "dark" }} />
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={labelSt}>
+                Class {loadingEvs && <span style={{ color: C.text3, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— loading…</span>}
+              </label>
+              <select value={selEvent} onChange={e => handleSelectEvent(e.target.value)}
+                style={{ ...inputSt, borderColor: regErrors.selEvent ? "#c20000" : "rgba(240,236,224,0.1)", cursor: "pointer" }}
+                disabled={loadingEvs || events.length === 0}>
+                <option value="">{loadingEvs ? "Loading classes…" : events.length === 0 ? "No classes on this date" : "Select class…"}</option>
+                {events.map(ev => <option key={ev.id} value={ev.subject}>{ev.subject}</option>)}
+              </select>
+              {regErrors.selEvent && <p style={{ fontSize: 11, color: "#c20000", marginTop: 4 }}>Select a class.</p>}
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <label style={labelSt}>Time</label>
+              <input type="text" value={regTime} onChange={e => { setRegTime(e.target.value); setRegErrors(er => ({ ...er, regTime: false })); }}
+                placeholder="e.g. 8:00 PM"
+                style={{ ...inputSt, borderColor: regErrors.regTime ? "#c20000" : "rgba(240,236,224,0.1)" }} />
+              {regErrors.regTime && <p style={{ fontSize: 11, color: "#c20000", marginTop: 4 }}>Enter the class time.</p>}
+            </div>
+
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={labelSt}>Recap (Teams AI Summary)</label>
+              <textarea value={recapText} onChange={e => { setRecapText(e.target.value); setRegErrors(er => ({ ...er, recapText: false })); }}
+                placeholder="Paste the Teams AI summary here…" rows={10}
+                style={{ ...inputSt, resize: "vertical", lineHeight: 1.6, borderColor: regErrors.recapText ? "#c20000" : "rgba(240,236,224,0.1)" }} />
+              {regErrors.recapText && <p style={{ fontSize: 11, color: "#c20000", marginTop: 4 }}>Paste the recap content.</p>}
+            </div>
+
+            {saveOk && <div style={{ background: "rgba(109,181,138,0.1)", border: "1px solid rgba(109,181,138,0.25)", borderRadius: 10, padding: "0.65rem 1rem", marginBottom: "0.75rem", fontSize: 12, color: C.green, fontWeight: 600 }}>✓ Recap saved successfully.</div>}
+            {saveErr && <div style={{ background: "rgba(194,0,0,0.1)", border: "1px solid rgba(194,0,0,0.25)", borderRadius: 10, padding: "0.65rem 1rem", marginBottom: "0.75rem", fontSize: 12, color: "#c20000", fontWeight: 600 }}>{saveErr}</div>}
+            <button onClick={handleSave} disabled={saving}
+              style={{ width: "100%", background: saving ? "rgba(109,181,138,0.4)" : C.green, border: "none", borderRadius: 10, color: "#0d0b08", fontFamily: "inherit", fontSize: 13, fontWeight: 700, padding: "0.8rem", cursor: saving ? "wait" : "pointer", transition: "background 0.15s" }}>
+              {saving ? "Saving…" : "Save Recap"}
+            </button>
+          </div>
+        )}
+
+        {/* ── CARD 2: Access Recaps ────────────────────────────────── */}
+        <div style={{ ...CARD, borderRadius: 16, padding: "1.5rem" }}>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: C.amber, marginBottom: "1.25rem" }}>Access Recaps</p>
+
+          {/* Filters */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", marginBottom: "1.25rem" }}>
+            <div>
+              <label style={labelSt}>Date</label>
+              <input type="date" value={accDate} onChange={e => setAccDate(e.target.value)}
+                style={{ ...inputSt, colorScheme: "dark" }} />
+            </div>
+            <div>
+              <label style={labelSt}>Time</label>
+              <select value={accTime} onChange={e => setAccTime(e.target.value)}
+                style={{ ...inputSt, cursor: "pointer" }} disabled={recaps.length === 0}>
+                <option value="All">All times</option>
+                {uniqueTimes.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Fetch error */}
+          {fetchErr && <div style={{ background: "rgba(194,0,0,0.1)", border: "1px solid rgba(194,0,0,0.2)", borderRadius: 8, padding: "0.65rem 1rem", marginBottom: "0.75rem", fontSize: 12, color: "#c20000" }}>Error: {fetchErr}</div>}
+
+          {/* Count */}
+          {!loadingAcc && !fetchErr && recaps.length > 0 && (
+            <p style={{ fontSize: 11, color: C.text3, marginBottom: "0.75rem" }}>
+              {recaps.length} recap{recaps.length !== 1 ? "s" : ""} found · showing {filtered.length}
+              {accTime !== "All" ? ` at ${accTime}` : ""}
+            </p>
+          )}
+
+          {/* Results */}
+          {loadingAcc ? (
+            <p style={{ fontSize: 13, color: C.text3, textAlign: "center", padding: "2rem 0" }}>Loading recaps…</p>
+          ) : fetchErr ? null : filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "2rem 0" }}>
+              <p style={{ fontSize: 13, color: C.text3 }}>{recaps.length === 0 ? "No recaps found for this date." : "No recaps match the selected time."}</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {sortedTimes.map(time => (
+                <div key={time}>
+                  <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: C.text3, marginBottom: "0.5rem" }}>{time}</p>
+                  {grouped[time].map(r => {
+                    const isEditing = editingId === r.id;
+                    const isOpen    = expanded[r.id];
+                    const preview   = r.recap.length > 140 ? r.recap.slice(0, 140) + "…" : r.recap;
+                    return (
+                      <div key={r.id} style={{ background: "rgba(240,236,224,0.04)", border: `1px solid ${isEditing ? "rgba(240,236,224,0.2)" : "rgba(240,236,224,0.08)"}`, borderRadius: 12, padding: "1rem", marginBottom: "0.5rem", transition: "border-color 0.15s" }}>
+                        {/* Header row */}
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.6rem" }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: C.text, flex: 1 }}>{r.event_name}</p>
+                          {isAdmin && !isEditing && (
+                            <button onClick={() => { setEditingId(r.id); setEditText(r.recap); setEditErr(""); setExpanded(ex => ({ ...ex, [r.id]: false })); }}
+                              style={{ background: "rgba(240,236,224,0.06)", border: "1px solid rgba(240,236,224,0.1)", borderRadius: 7, color: C.text2, fontFamily: "inherit", fontSize: 10, fontWeight: 700, padding: "0.3rem 0.65rem", cursor: "pointer", whiteSpace: "nowrap", letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>
+                              Edit
+                            </button>
+                          )}
+                        </div>
+
+                        {isEditing ? (
+                          <>
+                            <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={10}
+                              style={{ ...inputSt, resize: "vertical", lineHeight: 1.6, marginBottom: "0.75rem" }} />
+                            {editErr && <p style={{ fontSize: 11, color: "#c20000", marginBottom: "0.5rem" }}>{editErr}</p>}
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button onClick={() => handleEditSave(r.id)} disabled={editSaving}
+                                style={{ flex: 1, background: C.green, border: "none", borderRadius: 8, color: "#0d0b08", fontFamily: "inherit", fontSize: 12, fontWeight: 700, padding: "0.6rem", cursor: editSaving ? "wait" : "pointer" }}>
+                                {editSaving ? "Saving…" : "Save"}
+                              </button>
+                              <button onClick={() => setEditingId(null)}
+                                style={{ flex: 1, background: "transparent", border: "1px solid rgba(240,236,224,0.1)", borderRadius: 8, color: C.text2, fontFamily: "inherit", fontSize: 12, fontWeight: 600, padding: "0.6rem", cursor: "pointer" }}>
+                                Cancel
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <p style={{ fontSize: 12, color: C.text2, lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                              {isOpen ? r.recap : preview}
+                            </p>
+                            {r.recap.length > 140 && (
+                              <button onClick={() => setExpanded(ex => ({ ...ex, [r.id]: !isOpen }))}
+                                style={{ background: "transparent", border: "none", color: C.green, fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "0.4rem 0 0", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                                {isOpen ? "Show less ↑" : "Read full recap ↓"}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN APP ───────────────────────────────────────────────────
 export default function DiloApp({ user, onLogout = () => {} }) {
   const role = user?.role || "student";
   const [active, setActive] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [unreadWA, setUnreadWA] = useState(0);
+
+  useEffect(() => {
+    if (role !== "admin") return;
+    supabase.from("whatsapp_inbox").select("id", { count: "exact" }).eq("is_read", false)
+      .then(({ count }) => setUnreadWA(count || 0));
+    const ch = supabase.channel("wa_inbox_badge")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "whatsapp_inbox" }, () =>
+        setUnreadWA(n => n + 1))
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [role]);
 
 
   useEffect(() => {
@@ -5596,14 +7871,16 @@ export default function DiloApp({ user, onLogout = () => {} }) {
       if (role === "coach") return <CoachDashboard user={user} />;
       return <StudentDashboard />;
     }
-    if (active === "feedbacks")          return <FeedbacksHub setActive={setActive} role={role} />;
+    if (active === "feedbacks")            return <FeedbacksHub setActive={setActive} role={role} />;
+    if (active === "new-class-feedback") return <NewClassFeedbackView user={user} role={role} setActive={setActive} />;
     if (active === "dilo-coach")         return <ClassPrepView user={user} />;
     if (active === "send-feedback")      return <SendFeedbackView user={user} setActive={setActive} />;
     if (active === "class-feedback")    return <ClassFeedbackView user={user} role={role} setActive={setActive} />;
     if (active === "student-feedback")  return <StudentFeedbackView user={user} role={role} setActive={setActive} />;
     if (active === "student-surveys")   return <StudentSurveysView user={user} role={role} setActive={setActive} />;
     if (active === "dilo-student") return <ClassPrepView user={user} />;
-    if (active === "calendario")   return <MasterSchedule role={role} user={user} />;
+    if (active === "calendario")    return <MasterSchedule role={role} user={user} />;
+    if (active === "next-classes") return <NextClassesView user={user} role={role} />;
     if (active === "invites")      return <InvitesView user={user} />;
     if (active === "settings")     return <SettingsView user={user} setActive={setActive} />;
     if (active === "kyc-coach")    return <KYCCoachView user={user} setActive={setActive} />;
@@ -5611,8 +7888,11 @@ export default function DiloApp({ user, onLogout = () => {} }) {
     if (active === "perfil-me")    return <ProfileView user={user} defaultSection="me"  setActive={setActive} />;
     if (active === "estudiantes")  return <AttendanceView />;
     if (active === "my-hours")     return <MyHoursView user={user} />;
-    if (active === "coaches")      return <CoachesView />;
-    if (active === "students")     return <StudentsView />;
+    if (active === "coaches")         return <CoachesView />;
+    if (active === "students")        return <StudentsView />;
+    if (active === "class-recaps")  return <MeetingRecapsView user={user} role={role} />;
+    if (active === "whatsapp")      return <WhatsAppView user={user} role={role} />;
+    if (active === "dinamicas")    return <DinamicasView user={user} role={role} />;
     const placeholders = {
       tps:          { title: "TPS", desc: "Training & Practices — content assigned by your coach.", icon: "practice" },
       feedbacks:    { title: "FeedbackHub", desc: "Class feedback history.", icon: "book" },
@@ -5635,7 +7915,7 @@ export default function DiloApp({ user, onLogout = () => {} }) {
         @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
       `}</style>
 
-      <Sidebar role={role} user={user} active={active} setActive={setActive} collapsed={collapsed} setCollapsed={setCollapsed} isMobile={isMobile} onLogout={onLogout} />
+      <Sidebar role={role} user={user} active={active} setActive={setActive} collapsed={collapsed} setCollapsed={setCollapsed} isMobile={isMobile} onLogout={onLogout} unreadWA={unreadWA} setUnreadWA={setUnreadWA} />
 
       {/* Main */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
