@@ -31,7 +31,14 @@ async function sendTemplate(
   language = "es"
 ) {
   const components = params.length
-    ? [{ type: "body", parameters: params.map(p => ({ type: "text", text: p })) }]
+    ? [{
+        type: "body",
+        parameters: params.map((p: any) =>
+          typeof p === "object" && p.name
+            ? { type: "text", parameter_name: p.name, text: p.value ?? "" }
+            : { type: "text", text: String(p) }
+        ),
+      }]
     : [];
 
   const payload = {

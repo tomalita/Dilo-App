@@ -3335,7 +3335,7 @@ function ProfileView({ user, defaultSection = "bio", setActive }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState({ nombre: "", apellido: "", teams_email: "" });
+  const [form, setForm] = useState({ nombre: "", apellido: "", teams_email: "", phone: "" });
   const isBio = defaultSection !== "me";
 
   useEffect(() => {
@@ -3346,7 +3346,8 @@ function ProfileView({ user, defaultSection = "bio", setActive }) {
           setForm({
             nombre: data.nombre || "",
             apellido: data.apellido || "",
-            teams_email: data.teams_email || data.email || ""
+            teams_email: data.teams_email || data.email || "",
+            phone: data.phone || "",
           });
         }
         setLoading(false);
@@ -3359,7 +3360,8 @@ function ProfileView({ user, defaultSection = "bio", setActive }) {
       .update({
         nombre: form.nombre.trim(),
         apellido: form.apellido.trim(),
-        teams_email: form.teams_email.trim()
+        teams_email: form.teams_email.trim(),
+        phone: form.phone.trim(),
       })
       .eq("id", user.id);
     setSaving(false);
@@ -3436,12 +3438,19 @@ function ProfileView({ user, defaultSection = "bio", setActive }) {
                 style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, padding: "0.7rem 0.9rem", fontSize: 14, color: C.text3, fontFamily: "inherit", outline: "none", cursor: "not-allowed" }} />
               <p style={{ fontSize: 11, color: C.text3 }}>Este correo no se puede cambiar — es el que usás para entrar a la app.</p>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: "1rem" }}>
               <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text3 }}>Teams email</label>
               <input value={form.teams_email} onChange={e => setForm(v => ({ ...v, teams_email: e.target.value }))}
                 placeholder="The email where Teams invitations are sent"
                 style={{ background: C.surface, border: `1px solid ${C.border2}`, borderRadius: 9, padding: "0.7rem 0.9rem", fontSize: 14, color: C.text, fontFamily: "inherit", outline: "none" }} />
               <p style={{ fontSize: 11, color: C.text3 }}>We use this email to show your classes in the calendar.</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text3 }}>WhatsApp</label>
+              <input value={form.phone} onChange={e => setForm(v => ({ ...v, phone: e.target.value }))}
+                placeholder="+50688887777"
+                style={{ background: C.surface, border: `1px solid ${C.border2}`, borderRadius: 9, padding: "0.7rem 0.9rem", fontSize: 14, color: C.text, fontFamily: "inherit", outline: "none" }} />
+              <p style={{ fontSize: 11, color: C.text3 }}>Número con código de país. Lo usamos para enviarte recordatorios de clase y avisos de pago.</p>
             </div>
           </div>
           <button onClick={save} disabled={saving}
@@ -5222,7 +5231,7 @@ const STU_WEEKDAYS  = [{v:1,l:"Mon"},{v:2,l:"Tue"},{v:3,l:"Wed"},{v:4,l:"Thu"},{
 const STU_SCHEDULES = ["Morning","Afternoon","Evening"];
 const STU_MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const STU_BLANK = {
-  name:"", email:"", group_number:"", level:"A2",
+  name:"", email:"", phone:"", group_number:"", level:"A2",
   billing_type:"weekly", days:[], schedule:"Morning", class_time:"09:00",
   company:"Dilo", package_hours:"", package_remaining:"", price_per_hour:"", currency:"CRC",
   discount:"0", pay_day:"30", comments:"",
@@ -5301,7 +5310,7 @@ function StudentsView() {
       package_remaining: form.billing_type === "package" ? (parseInt(form.package_remaining) ?? parseInt(form.package_hours) ?? null) : null,
       price_per_hour: parseFloat(form.price_per_hour) || 0,
       currency: form.currency, discount: parseFloat(form.discount) || 0,
-      pay_day: parseInt(form.pay_day) || 30, comments: form.comments, active: true,
+      pay_day: parseInt(form.pay_day) || 30, comments: form.comments, phone: form.phone?.trim() || null, active: true,
     };
     if (modal.mode === "edit") {
       await supabase.from("students").update(payload).eq("id", modal.data.id);
@@ -5798,6 +5807,14 @@ function StudentsView() {
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* WhatsApp */}
+            <div style={{ marginBottom:"1.25rem" }}>
+              <label style={labelSty}>WhatsApp</label>
+              <input value={form.phone || ""} placeholder="+50688887777"
+                onChange={e => setF("phone", e.target.value)}
+                style={inputSty} />
             </div>
 
             {/* Comments */}
@@ -7232,6 +7249,53 @@ const WA_TEMPLATES = [
     description: "Default Meta test template.",
     category: "test",
   },
+  {
+    name: "dilo_class_reminder",
+    label: "Recordatorio de clase",
+    language: "es",
+    params: [
+      { name: "nombre",   label: "Nombre del estudiante" },
+      { name: "hora",     label: "Hora de la clase" },
+      { name: "coach",    label: "Nombre del coach" },
+    ],
+    description: "Avisa al estudiante que su clase empieza en 1 hora.",
+    category: "class_reminder",
+  },
+  {
+    name: "dilo_payment_reminder",
+    label: "Recordatorio de pago",
+    language: "es",
+    params: [
+      { name: "nombre",   label: "Nombre del estudiante" },
+      { name: "monto",    label: "Monto (₡)" },
+      { name: "fecha",    label: "Fecha de vencimiento" },
+    ],
+    description: "Recuerda al estudiante que su pago vence pronto.",
+    category: "payment_reminder",
+  },
+  {
+    name: "dilo_payment_overdue",
+    label: "Pago vencido",
+    language: "es",
+    params: [
+      { name: "nombre",   label: "Nombre del estudiante" },
+      { name: "monto",    label: "Monto (₡)" },
+      { name: "fecha",    label: "Fecha programada" },
+    ],
+    description: "Notifica al estudiante que su pago está vencido.",
+    category: "payment_overdue",
+  },
+  {
+    name: "dilo_announcement",
+    label: "Anuncio general",
+    language: "es",
+    params: [
+      { name: "nombre",   label: "Nombre (o 'comunidad Dilo')" },
+      { name: "mensaje",  label: "Mensaje del anuncio" },
+    ],
+    description: "Envía un anuncio general a estudiantes o coaches.",
+    category: "announcement",
+  },
 ];
 
 const WA_STATUS_COLOR = { sent: C.green, failed: C.red, pending: C.text2 };
@@ -7272,7 +7336,9 @@ function WhatsAppView({ user, role }) {
           to: toPhone.trim(),
           template: tpl.name,
           language: tpl.language,
-          params,
+          params: tpl.params.map((p, i) =>
+            typeof p === "object" ? { name: p.name, value: params[i] || "" } : params[i] || ""
+          ),
           category: tpl.category,
         }),
       });
@@ -7359,7 +7425,7 @@ function WhatsAppView({ user, role }) {
   };
   const tabBtn = (id) => ({
     padding: "0.45rem 1.1rem", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-    background: tab === id ? C.amber : "transparent",
+    background: tab === id ? C.green : "transparent",
     color: tab === id ? "#000" : C.text2,
   });
 
@@ -7409,9 +7475,9 @@ function WhatsAppView({ user, role }) {
             />
           </div>
 
-          {tpl.params.map((pName, i) => (
+          {tpl.params.map((p, i) => (
             <div key={i} style={{ marginBottom: "1rem" }}>
-              <span style={label}>{pName}</span>
+              <span style={label}>{typeof p === "object" ? p.label : p}</span>
               <input
                 style={input}
                 value={params[i] || ""}
@@ -7428,7 +7494,7 @@ function WhatsAppView({ user, role }) {
             disabled={sending}
             style={{
               padding: "0.6rem 1.5rem", borderRadius: 8, border: "none", cursor: sending ? "not-allowed" : "pointer",
-              background: C.amber, color: "#000", fontWeight: 700, fontSize: 14,
+              background: C.green, color: "#000", fontWeight: 700, fontSize: 14,
               opacity: sending ? 0.6 : 1,
             }}
           >
@@ -7474,7 +7540,7 @@ function WhatsAppView({ user, role }) {
           {inbox.map(msg => (
             <div key={msg.id} style={{
               ...card,
-              borderLeft: msg.is_read ? `3px solid transparent` : `3px solid ${C.amber}`,
+              borderLeft: msg.is_read ? `3px solid transparent` : `3px solid ${C.green}`,
               opacity: msg.is_read ? 0.75 : 1,
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
