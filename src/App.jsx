@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react"
 import { supabase } from "./supabase.js"
 import DiloAuth from "./DiloAuth.jsx"
-import DiloApp, { loadCoachRoster } from "./DiloApp.jsx"
+import DiloApp from "./DiloApp.jsx"
+import { loadCoachRoster } from "./lib/shared.jsx"
 
 export default function App() {
   const [user, setUser] = useState(null)
