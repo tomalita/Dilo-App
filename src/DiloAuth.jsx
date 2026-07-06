@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "./supabase.js";
 
 // ── DESIGN TOKENS ──────────────────────────────────────────────
@@ -17,17 +17,90 @@ const C = {
   amber:    "#ca9a04",
 };
 
-// ── DILO LOGO ──────────────────────────────────────────────────
-function DiloLogo({ height = 28 }) {
+// ── DILO LOGO ANIMADO ──────────────────────────────────────────
+function DiloLogo({ height = 80 }) {
+  const iDotRef = useRef(null);
+  const periodRef = useRef(null);
+
+  useEffect(() => {
+    const iEl = iDotRef.current;
+    const pEl = periodRef.current;
+    if (!iEl || !pEl) return;
+
+    const ICX=319.5, ICY=300.5, DCX=692, DCY=497;
+    const BOY=24, INIT_OY=-155, G=1000;
+    const R_I=0.70, SPK=200, SPD=28, PVX=267, PVY=-558;
+
+    let id = { oy: INIT_OY, vy: 0, ph: 'fall', bc: 0 };
+    let pd = { ph: 'hidden' };
+    let lastT = null;
+    let raf;
+
+    iEl.setAttribute('transform', `translate(0,${INIT_OY})`);
+    pEl.setAttribute('transform', 'translate(0,0)');
+    pEl.style.opacity = '0';
+
+    function tick(ts) {
+      if (!lastT) { lastT = ts; raf = requestAnimationFrame(tick); return; }
+      const dt = Math.min((ts - lastT) / 1000, 0.033);
+      lastT = ts;
+
+      if (id.ph === 'fall') {
+        id.vy += G * dt; id.oy += id.vy * dt;
+        if (id.oy >= BOY && id.vy > 0) {
+          id.oy = BOY; id.vy = -id.vy * R_I; id.bc++;
+          if (id.bc >= 3) {
+            id.ph = 'spring';
+            pd = { cx: ICX, cy: ICY, vx: PVX, vy: PVY, ph: 'fly' };
+            pEl.style.opacity = '1';
+            pEl.setAttribute('transform', `translate(${ICX - DCX},${ICY - DCY})`);
+          }
+        }
+        iEl.setAttribute('transform', `translate(0,${id.oy.toFixed(2)})`);
+      } else if (id.ph === 'spring') {
+        id.vy += (-SPK * id.oy - SPD * id.vy) * dt;
+        id.oy += id.vy * dt;
+        if (Math.abs(id.oy) < 0.3 && Math.abs(id.vy) < 4) {
+          id.oy = 0; id.ph = 'done';
+          iEl.setAttribute('transform', 'translate(0,0)');
+        } else {
+          iEl.setAttribute('transform', `translate(0,${id.oy.toFixed(2)})`);
+        }
+      }
+
+      if (pd.ph === 'fly') {
+        pd.vy += G * dt; pd.cx += pd.vx * dt; pd.cy += pd.vy * dt;
+        if (pd.vy > 0 && pd.cy >= DCY) {
+          pd.ph = 'done';
+          pEl.setAttribute('transform', 'translate(0,0)');
+          return;
+        }
+        pEl.setAttribute('transform', `translate(${(pd.cx - DCX).toFixed(2)},${(pd.cy - DCY).toFixed(2)})`);
+      }
+
+      raf = requestAnimationFrame(tick);
+    }
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const w = Math.round(height * 640 / 475);
   return (
-    <svg height={height} width={height * 2.5} viewBox="80 270 640 290" fill="none">
-      <path fillRule="evenodd" clipRule="evenodd" d="M163.5 346C209.063 346 246 386.966 246 437.5C246 488.034 209.063 529 163.5 529C117.937 529 81 488.034 81 437.5C81 386.966 117.937 346 163.5 346ZM173.5 386C162.813 386 153.349 388.087 146 395C136.068 404.343 130 420.812 130 437C130 453.188 134.568 469.157 144.5 478.5C152.5 486.025 162.813 488 173.5 488C208 483.5 219 465.167 219 437C220 406.5 199.5 388.5 173.5 386Z" fill={C.text}/>
-      <path d="M254 524V272L207 276V475L218.5 509L229 524H254Z" fill={C.text}/>
+    <svg height={height} width={w} viewBox="80 95 640 475" fill="none" style={{ overflow: 'visible' }}>
+      <g>
+        <path fillRule="evenodd" clipRule="evenodd" d="M163.5 346C209.063 346 246 386.966 246 437.5C246 488.034 209.063 529 163.5 529C117.937 529 81 488.034 81 437.5C81 386.966 117.937 346 163.5 346ZM173.5 386C162.813 386 153.349 388.087 146 395C136.068 404.343 130 420.812 130 437C130 453.188 134.568 469.157 144.5 478.5C152.5 486.025 162.813 488 173.5 488C208 483.5 219 465.167 219 437C220 406.5 199.5 388.5 173.5 386Z" fill={C.text}/>
+        <path d="M254 524V272L207 276V475L218.5 509L229 524H254Z" fill={C.text}/>
+      </g>
       <path d="M343 351H296V524H343V351Z" fill={C.text}/>
-      <path d="M346 300.5C346 315.136 334.136 327 319.5 327C304.864 327 293 315.136 293 300.5C293 285.864 304.864 274 319.5 274C334.136 274 346 285.864 346 300.5Z" fill={C.text}/>
+      <g ref={iDotRef}>
+        <path d="M346 300.5C346 315.136 334.136 327 319.5 327C304.864 327 293 315.136 293 300.5C293 285.864 304.864 274 319.5 274C334.136 274 346 285.864 346 300.5Z" fill={C.text}/>
+      </g>
       <path d="M385 523.5V276L431 272V523.5H385Z" fill={C.text}/>
       <path fillRule="evenodd" clipRule="evenodd" d="M554.5 346C613.5 346 646 386.966 646 437.5C646 488.034 613.5 527.5 554.5 527.5C491 527.5 463 488.034 463 437.5C463 386.966 494 346 554.5 346ZM555.5 386C526.738 386 512 407.376 512 437.446C512 467.516 525.311 488 555.5 488C578 488 599 467.516 599 437.446C599 407.376 580.5 386 555.5 386Z" fill={C.text}/>
-      <path fillRule="evenodd" clipRule="evenodd" d="M692 471C706.359 471 718 482.641 718 497C718 511.359 706.359 523 692 523C677.641 523 666 511.359 666 497C666 482.641 677.641 471 692 471ZM692 479C682.059 479 674 487.283 674 497.5C674 507.717 682.059 516 692 516C701.941 516 710 507.717 710 497.5C710 487.283 701.941 479 692 479Z" fill={C.text}/>
+      <g ref={periodRef} style={{ opacity: 0 }}>
+        <path fillRule="evenodd" clipRule="evenodd" d="M692 471C706.359 471 718 482.641 718 497C718 511.359 706.359 523 692 523C677.641 523 666 511.359 666 497C666 482.641 677.641 471 692 471ZM692 479C682.059 479 674 487.283 674 497.5C674 507.717 682.059 516 692 516C701.941 516 710 507.717 710 497.5C710 487.283 701.941 479 692 479Z" fill={C.text}/>
+      </g>
     </svg>
   );
 }
@@ -514,7 +587,7 @@ export default function DiloAuth({ onLogin }) {
 
             {/* Logo */}
             <div style={{ textAlign: "center", marginBottom: "2rem", display: "flex", justifyContent: "center" }}>
-              <DiloLogo height={32} />
+              <DiloLogo height={80} />
             </div>
 
             {/* Card */}

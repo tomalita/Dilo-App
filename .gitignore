@@ -26,3 +26,6 @@ yarn-error.log*
 # Edge functions with secrets (never commit these)
 supabase-functions/
 supabase/.temp/
+
+# Supabase edge functions (secrets — never commit)
+supabase/functions/

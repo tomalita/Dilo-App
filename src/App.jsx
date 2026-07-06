@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { supabase } from "./supabase.js"
 import DiloAuth from "./DiloAuth.jsx"
-import DiloApp from "./DiloApp.jsx"
+import DiloApp, { loadCoachRoster } from "./DiloApp.jsx"
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -10,11 +10,10 @@ export default function App() {
 
   const loadProfile = async (session) => {
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
+      const [{ data: profile, error: profileError }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', session.user.id).single(),
+        loadCoachRoster(), // roster listo antes de montar cualquier vista
+      ])
 
       if (profileError || !profile) {
         // Profile missing — use defaults from session metadata

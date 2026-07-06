@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
-import kFoundation from "./knowledge/diloclub_foundation_v5.1.md?raw";
-import kA1        from "./knowledge/diloclub_a1_v5.1.md?raw";
-import kA2        from "./knowledge/diloclub_a2_v5.1.md?raw";
-import kB1        from "./knowledge/diloclub_b1_v5.1.md?raw";
-import kB2        from "./knowledge/diloclub_b2_v5.1.md?raw";
-import kC1        from "./knowledge/diloclub_c1_v5.1.md?raw";
-import kC2        from "./knowledge/diloclub_c2_v5.1.md?raw";
-
-const DILO_KNOWLEDGE = [kFoundation, kA1, kA2, kB1, kB2, kC1, kC2].join("\n\n---\n\n");
 
 // ── DESIGN TOKENS ──────────────────────────────────────────────
 const C = {
@@ -42,6 +33,64 @@ const SEL = (extra = {}) => ({
 });
 const ROL_LABELS = { student: "Student", coach: "Coach", admin: "Admin" };
 const ROL_COLORS = { student: C.green, coach: C.text2, admin: C.text2 };
+
+// ── SHARED HELPERS ─────────────────────────────────────────────
+const IVA_RATE = 0.02;                       // IVA servicios Costa Rica
+const CR_UTC_OFFSET_MS = 6 * 60 * 60 * 1000; // Costa Rica es UTC-6 todo el año (sin DST)
+const toCRDate = (iso) => new Date(new Date(iso).getTime() - CR_UTC_OFFSET_MS);
+const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONTHS_LONG  = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+let USD_RATE = 450; // ₡ por $ — fallback; el valor real vive en app_settings
+supabase.from("app_settings").select("value").eq("key", "usd_rate").single()
+  .then(({ data }) => { const v = parseFloat(data?.value); if (v > 0) USD_RATE = v; })
+  .catch(() => {});
+
+// ── COACH ROSTER — única fuente: coach_rates (via vista coaches_public) ──
+// Fallback = roster al momento del build; el vivo se carga antes de renderizar (App.jsx).
+const FALLBACK_ROSTER = [
+  { coach_name: "Ana",      color: "#f4a7b9", active: true },
+  { coach_name: "Ricardo",  color: "#4fc3f7", active: true },
+  { coach_name: "Jesse",    color: "#b7e4a0", active: true },
+  { coach_name: "Gabriela", color: "#ce93d8", active: true },
+  { coach_name: "Mafer",    color: "#1a73e8", active: true },
+  { coach_name: "Jose",     color: "#ff9f43", active: true },
+];
+let COACH_ROSTER = FALLBACK_ROSTER;
+const getCoachNames  = () => COACH_ROSTER.filter(c => c.active !== false).map(c => c.coach_name);
+const getCoachColors = () => { const m = {}; COACH_ROSTER.forEach(c => { m[c.coach_name] = c.color || "#9e9e9e"; }); return m; };
+
+export async function loadCoachRoster() {
+  try {
+    const { data } = await supabase.from("coaches_public")
+      .select("coach_name, color, active").order("coach_name");
+    if (data?.length) {
+      COACH_ROSTER = data;
+      // Refresh derived module-level lists (declared further down)
+      COACH_COLORS = getCoachColors();
+      COACHES      = ["All", ...getCoachNames()];
+      FB_COACHES   = [...getCoachNames()].sort();
+      AVATAR_COLORS = getCoachColors();
+    }
+  } catch { /* keep fallback */ }
+}
+
+// Toast no-bloqueante — reemplaza alert() nativo con el estilo de la app
+function toast(msg) {
+  const el = document.createElement("div");
+  el.textContent = msg;
+  Object.assign(el.style, {
+    position: "fixed", left: "50%", bottom: "calc(24px + env(safe-area-inset-bottom))",
+    transform: "translateX(-50%)", background: "#1e1b17", color: "#f0ece0",
+    border: "1px solid rgba(240,236,224,0.25)", borderRadius: "10px",
+    padding: "0.6rem 1rem", fontSize: "13px", fontFamily: "'Archivo', sans-serif",
+    zIndex: 9999, maxWidth: "90vw", boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
+    opacity: "0", transition: "opacity 0.25s",
+  });
+  document.body.appendChild(el);
+  requestAnimationFrame(() => { el.style.opacity = "1"; });
+  setTimeout(() => { el.style.opacity = "0"; setTimeout(() => el.remove(), 300); }, 3500);
+}
 
 // ── DILO LOGO ──────────────────────────────────────────────────
 // The ring/circle at the end of the Dilo wordmark, used as a styled period
@@ -145,37 +194,47 @@ const AlertDot = ({ color = C.amber }) => (
 // ── NAV CONFIG PER ROLE ─────────────────────────────────────────
 const NAV = {
   student: [
-    { id: "dashboard",    label: "Dashboard",     icon: "home" },
-    { id: "calendario",   label: "Calendar",      icon: "calendar" },
-    { id: "feedbacks",    label: "FeedbackHub",   icon: "book" },
-    { id: "tps",          label: "TPS",           icon: "practice" },
-    { id: "dilo-student", label: "Dilo Student",  icon: "agent" },
+    { id: "dashboard",    label: "Dashboard",    icon: "home" },
+    { id: "calendario",   label: "Calendar",     icon: "calendar" },
+    { id: "feedbacks",    label: "FeedbackHub",  icon: "book" },
+    { id: "tps",          label: "TPS",          icon: "practice" },
+    { id: "dilo-student", label: "Dilo Student", icon: "agent" },
   ],
   coach: [
-    { id: "dashboard",       label: "Dashboard",       icon: "home" },
-    { id: "calendario",      label: "Calendar",        icon: "calendar" },
-    { id: "next-classes",    label: "Next Classes",    icon: "schedule" },
-    { id: "my-hours",        label: "My Hours",        icon: "metrics" },
-    { id: "feedbacks",       label: "FeedbackHub",     icon: "book" },
-    { id: "class-recaps",  label: "Class Recaps",  icon: "recap" },
-    { id: "dinamicas",     label: "Dynamic Class",   icon: "slides" },
+    { section: "Overview" },
+    { id: "dashboard",    label: "Dashboard",    icon: "home" },
+    { id: "calendario",   label: "Calendar",     icon: "calendar" },
+    { id: "next-classes", label: "Next Classes", icon: "schedule" },
+    { section: "Teaching" },
+    { id: "feedbacks",    label: "FeedbackHub",  icon: "book" },
+    { id: "class-recaps", label: "Class Recaps", icon: "recap" },
+    { id: "dinamicas",    label: "Dynamic Class",icon: "slides" },
+    { section: "Track" },
+    { id: "progress",     label: "Progress",     icon: "practice" },
+    { id: "my-hours",     label: "My Hours",     icon: "metrics" },
   ],
   admin: [
-    { id: "dashboard",       label: "Dashboard",       icon: "home" },
-    { id: "calendario",      label: "Calendar",        icon: "calendar" },
-    { id: "next-classes",    label: "Next Classes",    icon: "schedule" },
-    { id: "estudiantes",     label: "Attendance",      icon: "users" },
-    { id: "coaches",         label: "Coaches",         icon: "coach" },
-    { id: "students",        label: "Students",        icon: "payment" },
-    { id: "feedbacks",       label: "FeedbackHub",     icon: "book" },
-    { id: "class-recaps",    label: "Class Recaps",    icon: "recap" },
-    { id: "whatsapp",        label: "WhatsApp",        icon: "whatsapp" },
-    { id: "dinamicas",     label: "Dynamic Class",   icon: "slides" },
-    { id: "tps",             label: "TPS",             icon: "practice" },
-    { id: "invites",         label: "Invitations",     icon: "invite" },
-    { id: "metricas",        label: "Metrics",         icon: "metrics" },
-    { id: "dilo-coach",      label: "Dilo Coach",      icon: "agent" },
-    { id: "dilo-student",    label: "Dilo Student",    icon: "agent" },
+    { section: "Overview" },
+    { id: "dashboard",    label: "Dashboard",    icon: "home" },
+    { id: "calendario",   label: "Calendar",     icon: "calendar" },
+    { id: "next-classes", label: "Next Classes", icon: "schedule" },
+    { section: "People" },
+    { id: "coaches",      label: "Coaches",      icon: "coach" },
+    { id: "students",     label: "Students",     icon: "payment" },
+    { id: "progress",     label: "Progress",     icon: "practice" },
+    { section: "Reporting" },
+    { id: "feedbacks",    label: "FeedbackHub",  icon: "book" },
+    { id: "class-recaps", label: "Class Recaps", icon: "recap" },
+    { id: "estudiantes",  label: "Attendance",   icon: "users" },
+    { section: "Finance" },
+    { id: "cashier",      label: "Cashier",      icon: "payment" },
+    { section: "Communications" },
+    { id: "whatsapp",     label: "WhatsApp",     icon: "whatsapp" },
+    { id: "invites",      label: "Invitations",  icon: "invite" },
+    { section: "Teaching" },
+    { id: "dinamicas",    label: "Dynamic Class",icon: "slides" },
+    { id: "dilo-coach",   label: "Dilo Coach",   icon: "agent" },
+    { id: "dilo-student", label: "Dilo Student", icon: "agent" },
   ],
 };
 
@@ -276,15 +335,15 @@ function CoachDashboard({ user }) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd   = new Date(now.getFullYear(), now.getMonth()+1, 0, 23,59,59);
 
-  const COACHES      = ["Ana","Ricardo","Jesse","Gabriela","Mafer"];
-  const COACH_COLORS = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
+  const COACHES      = getCoachNames();
+  const COACH_COLORS = getCoachColors();
 
   const fetchTeams = (start, end) => fetch(EDGE_URL, {
     method:"POST",
     headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
     body: JSON.stringify({ source:"teams", startDateTime: start.toISOString(), endDateTime: end.toISOString() })
   }).then(r=>r.json()).then(d =>
-    Array.isArray(d) ? d.map(ev=>({...ev, date: new Date(new Date(ev.start).getTime()-6*60*60*1000)})).filter(ev=>!isNaN(ev.date)) : []
+    Array.isArray(d) ? d.map(ev=>({...ev, date: toCRDate(ev.start)})).filter(ev=>!isNaN(ev.date)) : []
   ).catch(()=>[]);
 
   // Mount: coach name + month events + sheets (once only)
@@ -296,23 +355,29 @@ function CoachDashboard({ user }) {
     const coachNamePromise = supabase.from("profiles").select("nombre").eq("id", user.id).single()
       .then(({ data }) => data?.nombre || user?.nombre || "");
 
-    const p2 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_CLASS })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+    const p2 = supabase
+      .from("class_sessions")
+      .select("coach, class_date, class_time")
+      .then(({ data }) => (data || []).map(r => ({
+        coach:      r.coach,
+        fecha:      r.class_date,
+        hora_clase: r.class_time,
+      }))).catch(() => []);
 
-    const p3 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_SURVEYS })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+    const p3 = supabase.from("student_feedback_sent").select("*")
+      .then(({ data }) => data || []).catch(() => []);
 
-    const p4 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_STUDENT })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+    const p4 = supabase
+      .from("class_session_students")
+      .select("student_name, performance_note, next_step, class_sessions(class_date, class_time, coach)")
+      .then(({ data }) => (data || []).map(r => ({
+        estudiante_nombre: r.student_name,
+        nota:              r.performance_note,
+        next_step:         r.next_step,
+        coach:             r.class_sessions?.coach      || "",
+        hora_clase:        r.class_sessions?.class_time  || "",
+        fecha:             r.class_sessions?.class_date  || "",
+      }))).catch(() => []);
 
     Promise.all([p2, p3, p4, coachNamePromise]).then(([cf, sv, sn, resolvedName]) => {
       if (resolvedName) setCoachName(resolvedName);
@@ -373,18 +438,17 @@ function CoachDashboard({ user }) {
     return !classFeedbacks.some(fb => {
       if (fb.coach !== coachName) return false;
       if (!fb.fecha) return false;
-      const raw = fb.fecha.split(",")[0].trim();
-      const parts = raw.split("/");
-      if (parts.length < 3) return false;
-      const [d,m,y] = parts;
-      if (`${+d}/${+m}/${+y}` !== `${ev.date.getDate()}/${ev.date.getMonth()+1}/${ev.date.getFullYear()}`) return false;
+      const fbDate = new Date(fb.fecha + "T00:00:00");
+      if (`${fbDate.getDate()}/${fbDate.getMonth()+1}/${fbDate.getFullYear()}` !== `${ev.date.getDate()}/${ev.date.getMonth()+1}/${ev.date.getFullYear()}`) return false;
       return (fb.hora_clase||"").trim().toUpperCase() === timeStr.toUpperCase();
     });
   });
 
-  const missingFbs = getMissingFbs(myClasses);
-  const missingMonthFbs = getMissingFbs(myMonthClasses);
-
+  const crNow = new Date(now.getTime() - CR_UTC_OFFSET_MS);
+  const pastOnly = evs => evs.filter(ev => ev.date < crNow);
+  const weekIsFuture = monday > crNow;
+  const missingFbs = getMissingFbs(weekIsFuture ? myClasses : pastOnly(myClasses));
+  const missingMonthFbs = getMissingFbs(pastOnly(myMonthClasses));
   // Ranking — month-filtered
   const getRankMonthBounds = (offset) => {
     const n = new Date();
@@ -399,10 +463,8 @@ function CoachDashboard({ user }) {
     const surveys = allSurveys.filter(s => {
       if (s.coach !== coach) return false;
       if (!s.fecha) return true;
-      const raw = s.fecha.split(",")[0].trim();
-      const [d, m, y] = raw.split("/");
-      if (!y) return true;
-      const dt = new Date(+y, +m - 1, +d);
+      const dt = new Date(s.fecha + "T00:00:00");
+      if (isNaN(dt)) return true;
       return dt >= rankStart && dt <= rankEnd;
     });
     if (!surveys.length) return 0;
@@ -433,11 +495,7 @@ function CoachDashboard({ user }) {
   // This handles coach rotation: Ricardo sees Ana's notes for Adriana's last session.
   const allStudentNotes = studentNotes
     .filter(r => r.fecha && r.estudiante_nombre && r.coach && r.hora_clase)
-    .map(r => {
-      const raw = r.fecha.split(",")[0].trim();
-      const [d, m, y] = raw.split("/");
-      return { ...r, _date: new Date(+y, +m - 1, +d) };
-    })
+    .map(r => ({ ...r, _date: new Date(r.fecha + "T00:00:00") }))
     .filter(r => !isNaN(r._date) && r._date < nowTs);
 
   let prevFeedback = [];
@@ -499,20 +557,27 @@ function CoachDashboard({ user }) {
         if (!ok) continue;
       }
 
-      const evDay    = new Date(ev.date); evDay.setHours(0, 0, 0, 0);
-      const evDayEnd = new Date(evDay);   evDayEnd.setDate(evDay.getDate() + 2);
+      const evDay = new Date(ev.date); evDay.setHours(0, 0, 0, 0);
       const evH  = ev.date.getHours();
       const evM  = ev.date.getMinutes();
       const ampm = evH >= 12 ? "PM" : "AM";
       const h12  = evH % 12 || 12;
       const tStr = `${h12}:${evM.toString().padStart(2,"0")} ${ampm}`;
 
-      const notes = allStudentNotes.filter(r =>
-        r._date >= evDay &&
-        r._date <= evDayEnd &&
+      // Lazy day-by-day search: day 0 first; only advance if empty.
+      // Prevents capturing notes from a *different* student's class at the same
+      // time on the next day (e.g. Melissa's 5 PM notes leaking into Hector's briefing).
+      const matchDayNotes = d => allStudentNotes.filter(r =>
+        r._date.getTime() === d.getTime() &&
         r.coach.split(" ")[0] === ev.coach &&
         (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase()
       );
+      const evDay1 = new Date(evDay); evDay1.setDate(evDay.getDate()+1);
+      const evDay2 = new Date(evDay); evDay2.setDate(evDay.getDate()+2);
+      const d0 = matchDayNotes(evDay);
+      const d1 = d0.length === 0 ? matchDayNotes(evDay1) : [];
+      const d2 = d1.length === 0 ? matchDayNotes(evDay2) : [];
+      const notes = d0.length > 0 ? d0 : d1.length > 0 ? d1 : d2;
       if (notes.length === 0) continue;
 
       // Rule 2: filter out notes for students who dropped from the class
@@ -559,7 +624,7 @@ function CoachDashboard({ user }) {
                   <div key={i} style={{ borderLeft:`2px solid ${C.border2}`, paddingLeft:"0.75rem" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"0.35rem", flexWrap:"wrap" }}>
                       <p style={{ fontSize:12, fontWeight:700, color:C.text }}>{r.estudiante_nombre}</p>
-                      <p style={{ fontSize:10, color:C.text3 }}>{r.fecha?.split(",")[0]}</p>
+                      <p style={{ fontSize:10, color:C.text3 }}>{isoFmt(r.fecha)}</p>
                     </div>
                     {r.nota && (
                       <p style={{ fontSize:11, color:C.text2, lineHeight:1.5, marginBottom: r.next_step ? "0.3rem" : 0 }}>
@@ -650,8 +715,8 @@ function CoachDashboard({ user }) {
           {[
             { label:"Classes this week",      value: weekLoading?"—":myClasses.length },
             { label:"Classes this month",     value: loading?"—":myMonthClasses.length },
-            { label:"Feedback due this week", value: weekLoading?"—":missingFbs.length, accent: !weekLoading && missingFbs.length > 0 ? C.amber : undefined },
-            { label:"Feedback due this month",value: loading?"—":missingMonthFbs.length, accent: !loading && missingMonthFbs.length > 0 ? C.amber : undefined },
+            { label:"Feedback due this week", value: weekLoading?"—":missingFbs.length, accent: weekLoading ? undefined : missingFbs.length > 0 ? C.amber : C.green },
+            { label:"Feedback due this month",value: loading?"—":missingMonthFbs.length, accent: loading ? undefined : missingMonthFbs.length > 0 ? C.amber : C.green },
           ].map((s,i) => (
             <div key={i} style={{ ...CARD, borderRadius:14, padding:"1rem 1.25rem" }}>
               <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:C.text3, marginBottom:6 }}>{s.label}</p>
@@ -664,11 +729,11 @@ function CoachDashboard({ user }) {
       {/* Missing feedbacks detail */}
       {!weekLoading && missingFbs.length > 0 && (
         <div style={{ background:"rgba(202,154,4,0.06)", border:`1px solid ${C.amber}44`, borderRadius:14, padding:"1rem 1.25rem", marginBottom:"1.25rem" }}>
-          <p style={{ fontSize:11, fontWeight:700, color:C.amber, marginBottom:"0.6rem" }}>⚠ {missingFbs.length} feedback{missingFbs.length>1?"s":""} pending</p>
+          <p style={{ fontSize:11, fontWeight:700, color:C.amber, marginBottom:"0.6rem" }}>{missingFbs.length} Feedback{missingFbs.length>1?"s":""} pending</p>
           <div style={{ display:"flex", flexWrap:"wrap", gap:"0.4rem" }}>
             {missingFbs.map((ev,i) => (
-              <span key={i} style={{ fontSize:10, fontWeight:600, padding:"2px 8px", borderRadius:50, background:"transparent", color:C.text2, border:`1px solid ${C.border2}` }}>
-                {ev.date.toLocaleDateString("en",{month:"short",day:"numeric"})} {ev.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true})}
+              <span key={i} style={{ fontSize:10, fontWeight:600, padding:"3px 8px", borderRadius:50, background:"rgba(240,236,224,0.04)", color:C.text2, border:`1px solid ${C.border2}`, display:"inline-flex", alignItems:"center", gap:5 }}>
+                {ev.date.toLocaleDateString("en",{month:"short",day:"numeric"})} {ev.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true})}<span style={{fontSize:10,color:C.amber}}>⚠</span>
               </span>
             ))}
           </div>
@@ -687,6 +752,7 @@ function AdminDashboard() {
   const [classFeedbacks, setClassFeedbacks] = useState([]);
   const [studentFeedbacks, setStudentFeedbacks] = useState([]);
   const [surveys, setSurveys] = useState([]);
+  const [attendedSessionIds, setAttendedSessionIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
 
@@ -703,71 +769,78 @@ function AdminDashboard() {
       to:   sat.toISOString().slice(0,10) };
   };
   const { mon: weekMon, sat: weekSat, from: dateFrom, to: dateTo } = getOffsetWeek(weekOffset);
-  const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const mo = MONTHS_SHORT;
   const weekLabel = weekMon.getMonth() === weekSat.getMonth()
     ? `${weekMon.getDate()} – ${weekSat.getDate()} ${mo[weekMon.getMonth()]} ${weekMon.getFullYear()}`
     : `${weekMon.getDate()} ${mo[weekMon.getMonth()]} – ${weekSat.getDate()} ${mo[weekSat.getMonth()]} ${weekSat.getFullYear()}`;
 
-  const COACHES = ["Ana","Ricardo","Jesse","Gabriela","Mafer"];
-  const COACH_COLORS = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
+  const COACHES = getCoachNames();
+  const COACH_COLORS = getCoachColors();
 
   useEffect(() => {
-    const from = new Date(dateFrom); from.setHours(0,0,0,0);
-    const to = new Date(dateTo); to.setHours(23,59,59,999);
+    const from = new Date(dateFrom + "T00:00:00");
+    const to = new Date(dateTo + "T00:00:00"); to.setHours(23,59,59,999);
 
     setLoading(true);
 
-    // Fetch Teams events — also seeds _schedCache[0] when range matches current week
     const _nowA = new Date(); const _dayA = _nowA.getDay();
     const _monA = new Date(_nowA); _monA.setDate(_nowA.getDate()-(_dayA===0?6:_dayA-1)); _monA.setHours(0,0,0,0);
-    const p1 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"teams", startDateTime: from.toISOString(), endDateTime: to.toISOString() })
-    }).then(r=>r.json()).then(d => {
-      const evs = Array.isArray(d) ? d.map(ev=>({...ev, date: new Date(new Date(ev.start).getTime()-6*60*60*1000)})).filter(ev=>!isNaN(ev.date)) : [];
-      if (from.getTime() === _monA.getTime()) {
-        _schedCache[0] = evs.map(ev => ({ uid: ev.uid||(ev.summary||"")+(ev.start||""), summary: ev.summary||"Sin título", date: ev.date, coach: ev.coach||"Unassigned", nivel:"", estudiantes:ev.estudiantes||"", joinUrl:ev.joinUrl||null, urgente:false }));
-      }
-      return evs;
-    }).catch(()=>[]);
 
-    // Fetch Class Feedbacks
-    const p2 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_CLASS })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+    (async () => {
+      // Teams events
+      let ev = [];
+      try {
+        const d = await fetch(EDGE_URL, {
+          method:"POST",
+          headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
+          body: JSON.stringify({ source:"teams", startDateTime: from.toISOString(), endDateTime: to.toISOString() })
+        }).then(r=>r.json());
+        ev = Array.isArray(d) ? d.map(e=>({...e, date: toCRDate(e.start)})).filter(e=>!isNaN(e.date)) : [];
+        if (from.getTime() === _monA.getTime()) {
+          _schedCache[0] = ev.map(e => ({ uid: e.uid||(e.summary||"")+(e.start||""), summary: e.summary||"Sin título", date: e.date, coach: e.coach||"Unassigned", nivel:"", estudiantes:e.estudiantes||"", joinUrl:e.joinUrl||null, urgente:false }));
+        }
+      } catch(_) {}
 
-    // Fetch Student Feedbacks
-    const p3 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_STUDENT })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+      // Class Feedbacks — class_sessions filtered by week (id included for attendance cross-check)
+      let cf = [];
+      try {
+        const { data } = await supabase.from("class_sessions").select("id, coach, class_date, class_time").gte("class_date", dateFrom).lte("class_date", dateTo);
+        cf = (data || []).map(r => ({ id: r.id, coach: r.coach, fecha: r.class_date, hora_clase: r.class_time }));
+      } catch(_) {}
 
-    // Fetch Surveys
-    const p4 = fetch(EDGE_URL, {
-      method:"POST",
-      headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_SURVEYS })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+      // Attendance imported — which sessions have at least one record in session_attendance
+      let attIds = new Set();
+      try {
+        if (cf.length) {
+          const { data: attData } = await supabase
+            .from("session_attendance")
+            .select("class_session_id")
+            .in("class_session_id", cf.map(r => r.id));
+          attIds = new Set((attData || []).map(a => a.class_session_id));
+        }
+      } catch(_) {}
 
-    Promise.all([p1,p2,p3,p4]).then(([ev,cf,sf,sv]) => {
+      // Student Feedbacks — via class_session_students
+      let sf = [];
+      try {
+        const { data } = await supabase.from("class_sessions").select("coach, class_date, class_session_students(id)").gte("class_date", dateFrom).lte("class_date", dateTo);
+        sf = (data || []).flatMap(r => (r.class_session_students || []).map(() => ({ coach: r.coach, fecha: r.class_date })));
+      } catch(_) {}
+
+      // Surveys — Supabase
+      let sv = [];
+      try {
+        const { data: svData } = await supabase.from("student_feedback_sent").select("*").gte("fecha", dateFrom).lte("fecha", dateTo);
+        sv = svData || [];
+      } catch(_) {}
+
       setTeamsEvents(ev);
-      // Filter sheets by date range
-      const inRange = (r) => {
-        if (!r.fecha) return true;
-        const raw = r.fecha.split(",")[0].trim(); // "22/5/2026"
-        const [d,m,y] = raw.split("/");
-        const dt = new Date(+y, +m-1, +d);
-        return dt >= from && dt <= to;
-      };
-      setClassFeedbacks(cf.filter(inRange));
-      setStudentFeedbacks(sf.filter(inRange));
-      setSurveys(sv.filter(inRange));
+      setClassFeedbacks(cf);
+      setStudentFeedbacks(sf);
+      setSurveys(sv);
+      setAttendedSessionIds(attIds);
       setLoading(false);
-    });
+    })();
   }, [dateFrom, dateTo]);
 
   // Compute stats per coach
@@ -798,13 +871,14 @@ function AdminDashboard() {
     studentFb:  studentFeedbacks.length,
     surveys:    surveys.length,
     unassigned: teamsEvents.filter(ev => !COACHES.includes(ev.coach)).length,
+    attendance: classFeedbacks.filter(r => attendedSessionIds.has(r.id)).length,
   };
 
   const maxClasses = Math.max(...coachStats.map(c => c.classes), 1);
 
   const adminNow = new Date();
   const nextAdminClass = teamsEvents.filter(ev => ev.date >= adminNow).sort((a,b) => a.date - b.date)[0] || null;
-  const ADMIN_COACH_COLORS = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
+  const ADMIN_COACH_COLORS = getCoachColors();
 
   return (
     <div style={{ maxWidth: 900, width: "100%" }}>
@@ -851,6 +925,10 @@ function AdminDashboard() {
           { label:"Classes", value: loading?"—":totals.classes, sub:"Teams calendar" },
           { label:"Unassigned", value: loading?"—":totals.unassigned, sub:"No coach assigned",
             accent: !loading ? (totals.unassigned === 0 ? C.green : C.red) : undefined },
+          { label:"Attendance", value: loading?"—":`${totals.attendance}/${totals.classFb}`, sub:"Sessions imported",
+            accent: !loading && totals.classFb > 0
+              ? (totals.attendance === totals.classFb ? C.green : totals.attendance > 0 ? C.amber : undefined)
+              : undefined },
           { label:"Class Feedbacks", value: loading?"—":totals.classFb, sub:"Sent by coaches" },
           { label:"Student Feedbacks", value: loading?"—":totals.studentFb, sub:"Individual notes" },
           { label:"Student Surveys", value: loading?"—":totals.surveys, sub:"Received from students" },
@@ -891,12 +969,8 @@ function AdminDashboard() {
                 const hasFb = classFeedbacks.some(fb => {
                   if (fb.coach !== cs.coach) return false;
                   if (!fb.fecha) return false;
-                  const raw = fb.fecha.split(",")[0].trim();
-                  const parts = raw.split("/");
-                  if (parts.length < 3) return false;
-                  const [d,m,y] = parts;
-                  const fbDate = `${+d}/${+m}/${+y}`;
-                  if (fbDate !== `${evDate.getDate()}/${evDate.getMonth()+1}/${evDate.getFullYear()}`) return false;
+                  const fbParsed = new Date(fb.fecha + "T00:00:00");
+                  if (`${fbParsed.getDate()}/${fbParsed.getMonth()+1}/${fbParsed.getFullYear()}` !== `${evDate.getDate()}/${evDate.getMonth()+1}/${evDate.getFullYear()}`) return false;
                   const fbHour = (fb.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase();
                   return fbHour === timeStr.toUpperCase();
                 });
@@ -947,7 +1021,7 @@ function AdminDashboard() {
                       <td colSpan={7} style={{ padding:"0 1rem 0.75rem" }}>
                         <div style={{ display:"flex", flexWrap:"wrap", gap:"0.4rem" }}>
                           {missingFbs.map((ev,mi) => {
-                            const label = `${ev.date.toLocaleDateString("en",{month:"short",day:"numeric"})} ${ev.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true})} · ${ev.estudiantes?.split(",")[0] || ev.summary}`;
+                            const label = `${ev.date.toLocaleDateString("en",{month:"short",day:"numeric"})} ${ev.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true})}`;
                             return (
                               <span key={mi} style={{ fontSize:10, fontWeight:600, padding:"3px 8px", borderRadius:50, background:"rgba(240,236,224,0.04)", color:C.text2, border:`1px solid ${C.border2}`, display:"inline-flex", alignItems:"center", gap:5 }}>
                                 {label}<span style={{fontSize:10, color:C.amber}}>⚠</span>
@@ -973,10 +1047,9 @@ function AdminDashboard() {
 // FEEDBACKS HUB
 function FeedbacksHub({ setActive, role }) {
   const allCards = [
-    { id: "new-class-feedback", title: "New Class Feedback", desc: "Submit per-student scores across listening, grammar, reading and speaking.", send: true, notStudent: true },
-    { id: "send-feedback",    title: "Class Feedback",    desc: "Submit your class feedback form.", send: true },
+    { id: "new-class-feedback", title: "Class Feedback", desc: "Submit per-student scores across listening, grammar, reading and speaking.", send: true, notStudent: true },
     { id: "class-feedback",   title: "Class Feedbacks Sent", desc: "Review your submitted class feedback.", coachOnly: true },
-    { id: "class-feedback",   title: "Class Feedback",    desc: "Coach notes on each class performance.", adminOnly: true },
+    { id: "class-feedback",   title: "Class Feedback Sent", desc: "Coach notes on each class performance.", adminOnly: true },
     { id: "student-feedback", title: "Student Feedback Sent", desc: "Individual student notes and next steps." },
     { id: "student-surveys",  title: "Student Surveys",   desc: "Satisfaction surveys completed by students.", adminOnly: true },
   ];
@@ -1043,18 +1116,15 @@ const getWeekRange = () => {
   };
 };
 // ── FEEDBACK VIEWS ────────────────────────────────────────────
-const COACH_RATES = {
-  Ricardo:  { rate: 8000,  currency: "₡", iva: true },
-  Ana:      { rate: 6018,  currency: "₡", iva: true },
-  Mafer:    { rate: 3570,  currency: "₡", iva: true },
-  Gabriela: { rate: 2550,  currency: "₡", iva: true },
-  Jesse:    { rate: 15,    currency: "$", iva: false },
-};
-
+// Converts ISO "YYYY-MM-DD" → "DD/MM/YYYY" for display (does not create a Date object)
+const isoFmt = s => s ? s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4) : "";
 const ANON_KEY        = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InphZHlueHFhc2doYnVmcXpyZ2Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NzI1MDYsImV4cCI6MjA5NDA0ODUwNn0.Utn2e0DPRAlrzk8M5iKs0BS-UfVM6JIL3trH9PN0hKk";
 const EDGE_URL        = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/rapid-endpoint";
 const ATTENDANCE_URL  = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/attendance-endpoint";
 const WHATSAPP_URL    = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/whatsapp-sender";
+const CASHIER_URL        = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/smooth-processor";
+const CASHIER_INTENT_URL = "https://zadynxqasghbufqzrgfy.supabase.co/functions/v1/cashier-create-intent"; // update slug after deploy
+const ONVO_PUBLIC_KEY    = "onvo_live_publishable_key_-zkvnOlRgc4_rkP58dkc7JcsiIesaqrH-0lLFVXUMAOS7fGKfAxsnM_9TSbWkAi5KnmdmD2CTDSqt44q26CsDQ";
 // Module-level caches — survive component unmount/remount (navigation between tabs)
 const _schedCache = {};     // weekOffset → events[]  (shared: Dashboard seeds, Schedule reads)
 let   _monthCache = null;   // coach month events      (shared: Dashboard seeds, Schedule reads)
@@ -1063,8 +1133,8 @@ const SHEET_CLASS    = "1TmxAa-dbaTgPYCZyXl91fJDIZ997-8twnbQEmVluZ6A";
 const SHEET_STUDENT  = "1jwDyhxVAnj0LY5k0fs_n3eYzLorCkAMBxapFA-7SgYw";
 const SHEET_SURVEYS  = "1R1n_ucN9mnky1vVYXyEFnYghaJjemzqRHQ7URv6LTUE";
 
-const COACH_COLORS = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
-const COACHES = ["All","Ana","Ricardo","Jesse","Gabriela","Mafer"];
+let COACH_COLORS = getCoachColors();
+let COACHES = ["All", ...getCoachNames()];
 
 function useSheet(sheetId) {
   const [data, setData] = useState([]);
@@ -1083,6 +1153,17 @@ function useSheet(sheetId) {
     })
     .catch(() => setLoading(false));
   }, [sheetId]);
+  return { data, loading };
+}
+
+function useSurveys() {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    supabase.from("student_feedback_sent").select("*").order("fecha", { ascending: false })
+      .then(({ data }) => { setData(data || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
   return { data, loading };
 }
 
@@ -1117,7 +1198,7 @@ function CoachFilter({ value, onChange }) {
 
 // SEND FEEDBACK VIEW — native React form
 const FB_WEBHOOK = 'https://script.google.com/macros/s/AKfycbyLBlGEBHi8MOLI0w3tWtwE3qWsW9CpmgMiUnWuphUSo5HPyNsii5pZACmsClCP9a45/exec';
-const FB_COACHES = ["Ana","Gabriela","Jesse","Mafer","Ricardo"];
+let FB_COACHES = [...getCoachNames()].sort();
 const FB_HOURS   = ['1','2','3','4','5','6','7','8','9','10','11','12'];
 const FB_MINS    = ['00','30'];
 const FB_AMPM    = ['AM','PM'];
@@ -1196,7 +1277,7 @@ function FbStudentCard({ idx, isWorkshop, isPrivate, data, onChange, onRemove, e
 }
 
 function SendFeedbackView({ user, setActive }) {
-  const coachName = user?.nombre || "";
+  const coachName = (user?.nombre || "").split(" ")[0];
 
   const [coach,       setCoach]      = useState(coachName);
   const [hora,        setHora]       = useState("");
@@ -1224,7 +1305,7 @@ function SendFeedbackView({ user, setActive }) {
     if (!document.getElementById("dilo-drum-css")) {
       const s = document.createElement("style");
       s.id = "dilo-drum-css";
-      s.textContent = ".fb-drum::-webkit-scrollbar{display:none}";
+      s.textContent = ".fb-drum::-webkit-scrollbar{display:none}[contenteditable][data-placeholder]:empty:before{content:attr(data-placeholder);color:rgba(240,236,224,0.25);pointer-events:none}";
       document.head.appendChild(s);
     }
   }, []);
@@ -1627,20 +1708,15 @@ function NewStudentCard({ idx, isOnly, data, onChange, onRemove, onToggleNoShow,
 }
 
 function NewClassFeedbackView({ user, role, setActive }) {
-  const coachName = user?.nombre || "";
+  const coachName = (user?.nombre || "").split(" ")[0];
   const [coach,      setCoach]     = useState(coachName);
   const [classDate,  setClassDate] = useState(crToday);
   const [classType,  setClassType] = useState("");
   const [hasReading, setHasReading]= useState(false);
-  const [hora,       setHora]      = useState("");
-  const [tpOpen,     setTpOpen]    = useState(false);
-  const [tpH,        setTpH]       = useState(5);
-  const [tpM,        setTpM]       = useState(0);
-  const [tpAP,       setTpAP]      = useState(0);
-  const drumH  = useRef(null);
-  const drumM  = useRef(null);
-  const drumAP = useRef(null);
-  const timers = useRef({});
+  const [hora,           setHora]           = useState("");
+  const [classTitle,     setClassTitle]     = useState("");
+  const [dayClasses,     setDayClasses]     = useState([]);
+  const [classesLoading, setClassesLoading] = useState(false);
 
   const emptyStudent = () => ({ name:"", listening:null, grammar:null, reading:null, oral_confidence:null, speaking_fluency:null, speaking_output:null, performance_note:"", next_step:"", noShow:false, loadingPrev:false });
   const [students,   setStudents]  = useState([emptyStudent()]);
@@ -1649,49 +1725,39 @@ function NewClassFeedbackView({ user, role, setActive }) {
   const [submitted,  setSubmitted] = useState(false);
   const [submitErr,  setSubmitErr] = useState("");
 
+  // Fetch Teams classes for the selected date + coach
   useEffect(() => {
-    if (!document.getElementById("dilo-drum-css")) {
-      const s = document.createElement("style"); s.id = "dilo-drum-css";
-      s.textContent = ".fb-drum::-webkit-scrollbar{display:none}";
-      document.head.appendChild(s);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!tpOpen) return;
-    const t = setTimeout(() => {
-      if (drumH.current)  drumH.current.scrollTop  = tpH  * 44;
-      if (drumM.current)  drumM.current.scrollTop  = tpM  * 44;
-      if (drumAP.current) drumAP.current.scrollTop = tpAP * 44;
-    }, 50);
-    return () => clearTimeout(t);
-  }, [tpOpen]);
-
-  function handleDrumScroll(col) {
-    const ref   = col==="h" ? drumH   : col==="m" ? drumM   : drumAP;
-    const items = col==="h" ? FB_HOURS: col==="m" ? FB_MINS : FB_AMPM;
-    const set   = col==="h" ? setTpH  : col==="m" ? setTpM  : setTpAP;
-    clearTimeout(timers.current[col]);
-    timers.current[col] = setTimeout(() => {
-      if (!ref.current) return;
-      const idx = Math.max(0, Math.min(items.length-1, Math.round(ref.current.scrollTop/44)));
-      ref.current.scrollTo({ top:idx*44, behavior:"smooth" });
-      set(idx);
-    }, 80);
-  }
-
-  function snapDrum(col, idx) {
-    const ref = col==="h" ? drumH : col==="m" ? drumM : drumAP;
-    const set  = col==="h" ? setTpH : col==="m" ? setTpM : setTpAP;
-    if (ref.current) ref.current.scrollTo({ top:idx*44, behavior:"smooth" });
-    set(idx);
-  }
-
-  function confirmTime() {
-    setHora(FB_HOURS[tpH]+":"+FB_MINS[tpM]+" "+FB_AMPM[tpAP]);
-    setErrors(e => ({ ...e, hora:false }));
-    setTpOpen(false);
-  }
+    if (!classDate || !coach) { setDayClasses([]); return; }
+    setDayClasses([]);
+    setHora("");
+    setClassTitle("");
+    setClassesLoading(true);
+    const ds = new Date(classDate + "T00:00:00");
+    const de = new Date(classDate + "T23:59:59");
+    Promise.all([
+      fetch(EDGE_URL, {
+        method:"POST",
+        headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
+        body: JSON.stringify({ source:"teams", startDateTime: ds.toISOString(), endDateTime: de.toISOString() })
+      }).then(r=>r.json()).catch(()=>[]),
+      supabase.from("class_sessions").select("class_time").eq("coach", coach).eq("class_date", classDate)
+        .then(({data})=>(data||[]).map(s=>s.class_time.trim().toUpperCase())).catch(()=>[]),
+    ]).then(([d, submittedTimes]) => {
+      const submitted = new Set(submittedTimes);
+      const evs = Array.isArray(d)
+        ? d.map(ev=>({...ev, date: toCRDate(ev.start)}))
+            .filter(ev=>!isNaN(ev.date))
+            .filter(ev=>(ev.coach||"").split(" ")[0].toLowerCase()===coach.toLowerCase())
+            .filter(ev=>{
+              const h=ev.date.getHours(),m=ev.date.getMinutes();
+              const t=`${h%12||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
+              return !submitted.has(t.toUpperCase());
+            })
+            .sort((a,b)=>a.date-b.date)
+        : [];
+      setDayClasses(evs);
+    }).catch(()=>setDayClasses([])).finally(()=>setClassesLoading(false));
+  }, [classDate, coach]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateStudent(idx, field, val) {
     setStudents(a => a.map((s,i) => i===idx ? { ...s, [field]:val } : s));
@@ -1713,33 +1779,25 @@ function NewClassFeedbackView({ user, role, setActive }) {
 
     try {
       const studentName = current.name.trim();
-      let prevNote = "No feedback yet.";
-      let prevNext = "No feedback yet.";
+      let prevNote = "";
+      let prevNext = "";
 
       if (studentName) {
-        // Find the most recent session record for this student (by name, case-insensitive)
+        // Last real (non-no-show) session for this student
         const { data: rows } = await supabase
           .from("class_session_students")
           .select("performance_note, next_step, class_sessions(class_date)")
           .ilike("student_name", studentName)
+          .eq("no_show", false)
           .not("performance_note", "is", null)
           .order("id", { ascending: false })
           .limit(1);
 
         if (rows && rows.length > 0) {
-          const prev = rows[0];
-          const dateLabel = prev.class_sessions?.class_date
-            ? ` (${prev.class_sessions.class_date})`
-            : "";
-          prevNote = `[No Show — ref from previous session${dateLabel}] ${prev.performance_note || ""}`.trim();
-          prevNext = prev.next_step || "No feedback yet.";
-        } else {
-          prevNote = "[No Show — No feedback yet.]";
-          prevNext = "No feedback yet.";
+          prevNote = rows[0].performance_note || "";
+          prevNext = rows[0].next_step || "";
         }
-      } else {
-        prevNote = "[No Show — No feedback yet.]";
-        prevNext = "No feedback yet.";
+        // If no previous session, leave blank — coach fills in manually
       }
 
       setStudents(a => a.map((s,i) => i===idx
@@ -1749,7 +1807,7 @@ function NewClassFeedbackView({ user, role, setActive }) {
     } catch(e) {
       console.error("handleNoShowToggle error:", e);
       setStudents(a => a.map((s,i) => i===idx
-        ? { ...s, noShow:true, loadingPrev:false, performance_note:"[No Show — No feedback yet.]", next_step:"No feedback yet." }
+        ? { ...s, noShow:true, loadingPrev:false, performance_note:"", next_step:"" }
         : s
       ));
     }
@@ -1785,7 +1843,7 @@ function NewClassFeedbackView({ user, role, setActive }) {
     try {
       const { data: session, error: sessionErr } = await supabase
         .from("class_sessions")
-        .insert({ coach, class_date: classDate, class_time: hora, class_type: classType, has_reading: hasReading, created_by: user?.id })
+        .insert({ coach, class_date: classDate, class_time: hora, class_type: classType, class_title: classTitle||null, has_reading: hasReading, created_by: user?.id })
         .select().single();
       if (sessionErr) throw sessionErr;
 
@@ -1805,7 +1863,7 @@ function NewClassFeedbackView({ user, role, setActive }) {
           next_step:        s.next_step,
         })));
       if (studentsErr) throw studentsErr;
-      setSubmitted(true);
+      setActive("feedbacks");
     } catch(e) {
       setSubmitErr("Something went wrong. Please try again.");
       console.error(e);
@@ -1814,37 +1872,13 @@ function NewClassFeedbackView({ user, role, setActive }) {
     }
   }
 
-  function resetForm() {
-    setCoach(coachName); setClassDate(crToday());
-    setClassType(""); setHasReading(false); setHora("");
-    setStudents([emptyStudent()]); setErrors({}); setSubmitted(false); setSubmitErr("");
-  }
-
   const drumCol = { flex:1, overflowY:"scroll", scrollSnapType:"y mandatory", WebkitOverflowScrolling:"touch", scrollbarWidth:"none", padding:"88px 0", textAlign:"center" };
-
-  if (submitted) return (
-    <div style={{ maxWidth:560, width:"100%" }}>
-      <div style={{ marginBottom:"1.5rem" }}>
-        <BackBtn onClick={() => setActive("feedbacks")} />
-        <h2 style={{ fontSize:"clamp(1.6rem,4vw,2.2rem)", fontWeight:900, letterSpacing:"-0.03em", color:C.text }}>New Class Feedback</h2>
-      </div>
-      <div style={{ ...CARD, borderRadius:16, padding:"3rem 1.5rem", textAlign:"center" }}>
-        <div style={{ width:52, height:52, background:"rgba(109,181,138,0.12)", border:"1px solid rgba(109,181,138,0.3)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 1.25rem", fontSize:22 }}>✓</div>
-        <h2 style={{ fontSize:"1.5rem", fontWeight:900, letterSpacing:"-0.02em", color:C.text, marginBottom:"0.5rem" }}>Feedback submitted!</h2>
-        <p style={{ fontSize:13, color:C.text3, marginBottom:"2rem", lineHeight:1.6 }}>All student scores and notes have been saved.</p>
-        <div style={{ display:"flex", gap:"0.75rem", justifyContent:"center", flexWrap:"wrap" }}>
-          <button onClick={resetForm} style={{ background:C.green, border:"none", borderRadius:10, color:"#0d0b08", fontFamily:"inherit", fontSize:13, fontWeight:700, padding:"0.75rem 1.5rem", cursor:"pointer" }}>Submit another</button>
-          <button onClick={() => setActive("feedbacks")} style={{ background:"transparent", border:`1px solid ${C.border2}`, borderRadius:10, color:C.text2, fontFamily:"inherit", fontSize:13, fontWeight:600, padding:"0.75rem 1.5rem", cursor:"pointer" }}>Back to Hub</button>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div style={{ maxWidth:560, width:"100%" }}>
       <div style={{ marginBottom:"1.5rem" }}>
         <BackBtn onClick={() => setActive("feedbacks")} />
-        <h2 style={{ fontSize:"clamp(1.6rem,4vw,2.2rem)", fontWeight:900, letterSpacing:"-0.03em", color:C.text, marginBottom:"0.4rem" }}>New Class Feedback</h2>
+        <h2 style={{ fontSize:"clamp(1.6rem,4vw,2.2rem)", fontWeight:900, letterSpacing:"-0.03em", color:C.text, marginBottom:"0.4rem" }}>Class Feedback</h2>
         <p style={{ fontSize:13, color:C.text2, lineHeight:1.6 }}>Fill in the class details, then add scores and notes for each student.</p>
       </div>
 
@@ -1874,42 +1908,53 @@ function NewClassFeedbackView({ user, role, setActive }) {
             {errors.classDate && <p style={fbErr}>Select a date.</p>}
           </div>
           <div>
-            <label style={fbLabel}>Time <span style={{color:"#c20000"}}>*</span></label>
-            <button type="button" onClick={()=>setTpOpen(o=>!o)}
-              style={{ ...fbInput, textAlign:"left", cursor:"pointer", color: hora ? C.text : "rgba(240,236,224,0.25)", borderColor: errors.hora ? "#c20000" : "rgba(240,236,224,0.07)" }}>
-              {hora || "Select time..."}
-            </button>
-            {errors.hora && <p style={fbErr}>Select a time.</p>}
+            <label style={fbLabel}>Class <span style={{color:"#c20000"}}>*</span></label>
+            {classesLoading
+              ? <div style={{ ...fbInput, color:C.text3 }}>Loading…</div>
+              : dayClasses.length === 0
+              ? <div style={{ ...fbInput, color:C.green, fontWeight:600 }}>You're up-to-date!</div>
+              : <select value={hora}
+                  onChange={e=>{
+                    const t=e.target.value;
+                    const ev=dayClasses.find(ev=>{const h=ev.date.getHours(),m=ev.date.getMinutes(),ap=h>=12?"PM":"AM";return `${h%12||12}:${String(m).padStart(2,"0")} ${ap}`===t;});
+                    setHora(t);
+                    const title = ev?.summary||"";
+                    setClassTitle(title);
+                    setErrors(er=>({...er,hora:false}));
+                    if (classType === "Private" && title) {
+                      const classMatch = title.match(/class\s+(.+)$/i);
+                      const studentName = classMatch ? classMatch[1].trim() : title.split(/\s+/).pop();
+                      setStudents(prev => prev.map((s,i) => i===0 ? { ...s, name: studentName } : s));
+                    }
+                  }}
+                  style={{ ...fbInput, borderColor: errors.hora ? "#c20000" : "rgba(240,236,224,0.07)", color: hora ? C.text : "rgba(240,236,224,0.25)" }}>
+                  <option value="">Select class…</option>
+                  {dayClasses.map((ev,i)=>{
+                    const h=ev.date.getHours(),m=ev.date.getMinutes();
+                    const ampm=h>=12?"PM":"AM"; const h12=h%12||12;
+                    const time=`${h12}:${String(m).padStart(2,"0")} ${ampm}`;
+                    return <option key={i} value={time} style={{background:"#1e1b17",color:"#f0ece0"}}>{time} · {ev.summary||"Class"}</option>;
+                  })}
+                </select>
+            }
+            {errors.hora && <p style={fbErr}>Select a class.</p>}
           </div>
         </div>
-
-        {/* Drum picker */}
-        {tpOpen && (
-          <>
-            <div style={{ background:"rgba(240,236,224,0.04)", border:"1px solid rgba(240,236,224,0.1)", borderRadius:12, overflow:"hidden", marginBottom:"0.75rem", position:"relative" }}>
-              <div style={{ position:"absolute", top:"50%", left:0, right:0, height:44, transform:"translateY(-50%)", background:"rgba(240,236,224,0.06)", borderTop:"1px solid rgba(240,236,224,0.1)", borderBottom:"1px solid rgba(240,236,224,0.1)", pointerEvents:"none", borderRadius:6, margin:"0 8px" }} />
-              <div style={{ display:"flex", height:220 }}>
-                <div ref={drumH} className="fb-drum" style={drumCol} onScroll={()=>handleDrumScroll("h")}>
-                  {FB_HOURS.map((v,i)=><div key={v} onClick={()=>snapDrum("h",i)} style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",scrollSnapAlign:"center",fontSize:22,fontWeight:i===tpH?600:400,color:i===tpH?C.text:C.text3,cursor:"pointer",userSelect:"none"}}>{v}</div>)}
-                </div>
-                <div ref={drumM} className="fb-drum" style={drumCol} onScroll={()=>handleDrumScroll("m")}>
-                  {FB_MINS.map((v,i)=><div key={v} onClick={()=>snapDrum("m",i)} style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",scrollSnapAlign:"center",fontSize:22,fontWeight:i===tpM?600:400,color:i===tpM?C.text:C.text3,cursor:"pointer",userSelect:"none"}}>{v}</div>)}
-                </div>
-                <div ref={drumAP} className="fb-drum" style={drumCol} onScroll={()=>handleDrumScroll("ap")}>
-                  {FB_AMPM.map((v,i)=><div key={v} onClick={()=>snapDrum("ap",i)} style={{height:44,display:"flex",alignItems:"center",justifyContent:"center",scrollSnapAlign:"center",fontSize:22,fontWeight:i===tpAP?600:400,color:i===tpAP?C.text:C.text3,cursor:"pointer",userSelect:"none"}}>{v}</div>)}
-                </div>
-              </div>
-            </div>
-            <button type="button" onClick={confirmTime} style={{ width:"100%", background:C.green, border:"none", borderRadius:9, color:"#0d0b08", fontFamily:"inherit", fontSize:14, fontWeight:700, padding:"0.75rem", cursor:"pointer", marginBottom:"0.5rem" }}>Confirm time</button>
-          </>
-        )}
 
         {/* Class type */}
         <div style={{ marginBottom:"1rem" }}>
           <label style={fbLabel}>Class type <span style={{color:"#c20000"}}>*</span></label>
           <div style={{ display:"flex", gap:"0.5rem" }}>
             {["Group","Private"].map(t => (
-              <button key={t} type="button" onClick={()=>{setClassType(t);setErrors(er=>({...er,classType:false}));}}
+              <button key={t} type="button" onClick={()=>{
+                setClassType(t);
+                setErrors(er=>({...er,classType:false}));
+                if (t === "Private" && classTitle) {
+                  const classMatch = classTitle.match(/class\s+(.+)$/i);
+                  const studentName = classMatch ? classMatch[1].trim() : classTitle.split(/\s+/).pop();
+                  setStudents(prev => prev.map((s,i) => i===0 ? { ...s, name: studentName } : s));
+                }
+              }}
                 style={{ flex:1, padding:"0.65rem", borderRadius:9, border:`1px solid ${classType===t ? C.green : "rgba(240,236,224,0.1)"}`, background: classType===t ? "rgba(109,181,138,0.12)" : "transparent", color: classType===t ? C.green : C.text3, fontFamily:"inherit", fontSize:13, fontWeight:600, cursor:"pointer", transition:"all 0.15s" }}>
                 {t}
               </button>
@@ -1939,12 +1984,15 @@ function NewClassFeedbackView({ user, role, setActive }) {
           hasReading={hasReading} errors={errors} />
       ))}
 
-      <button type="button" onClick={()=>setStudents(a=>[...a,emptyStudent()])}
-        style={{ width:"100%", background:"transparent", border:"1px dashed rgba(240,236,224,0.1)", borderRadius:14, color:"rgba(240,236,224,0.3)", fontFamily:"inherit", fontSize:13, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase", padding:"1rem", cursor:"pointer", transition:"all 0.2s", marginBottom:"0.75rem", minHeight:44 }}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.25)";e.currentTarget.style.color=C.text2;}}
-        onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.1)";e.currentTarget.style.color="rgba(240,236,224,0.3)";}}>
-        + Add student
-      </button>
+
+      {classType === "Group" && (
+        <button type="button" onClick={()=>setStudents(a=>[...a,emptyStudent()])}
+          style={{ width:"100%", background:"transparent", border:"1px dashed rgba(240,236,224,0.1)", borderRadius:14, color:"rgba(240,236,224,0.3)", fontFamily:"inherit", fontSize:13, fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase", padding:"1rem", cursor:"pointer", transition:"all 0.2s", marginBottom:"0.75rem", minHeight:44 }}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.25)";e.currentTarget.style.color=C.text2;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(240,236,224,0.1)";e.currentTarget.style.color="rgba(240,236,224,0.3)";}}>
+          + Add student
+        </button>
+      )}
 
       {submitErr && <p style={{ fontSize:12, color:"#c20000", marginBottom:"0.75rem", textAlign:"center" }}>{submitErr}</p>}
 
@@ -1958,38 +2006,47 @@ function NewClassFeedbackView({ user, role, setActive }) {
 
 // CLASS FEEDBACK VIEW
 function ClassFeedbackView({ user, role, setActive }) {
-  const { data, loading } = useSheet(SHEET_CLASS);
+  const [data,        setData]        = useState([]);
+  const [loading,     setLoading]     = useState(true);
   const [coachFilter, setCoachFilter] = useState("All");
-  const [dateFrom, setDateFrom] = useState(() => getWeekRange().from);
-  const [dateTo,   setDateTo]   = useState(() => getWeekRange().to);
+  const [dateFrom,    setDateFrom]    = useState(() => getWeekRange().from);
+  const [dateTo,      setDateTo]      = useState(() => getWeekRange().to);
+  const [expanded,    setExpanded]    = useState(null);
 
-  // For coaches, always fetch their real nombre from profile
   useEffect(() => {
     if (role === "coach" && user?.id) {
       supabase.from("profiles").select("nombre").eq("id", user.id).single()
         .then(({ data }) => { if (data?.nombre) setCoachFilter(data.nombre.split(" ")[0]); });
     }
   }, [role, user?.id]);
+
+  useEffect(() => {
+    supabase
+      .from("class_sessions")
+      .select("id, coach, class_date, class_time, class_type, has_reading, class_session_students(student_name, listening, grammar, reading, oral_confidence, speaking_fluency, speaking_output, no_show)")
+      .order("class_date", { ascending: false })
+      .then(({ data: sessions }) => { setData(sessions || []); setLoading(false); });
+  }, []);
+
   const metrics = [
-    { key:"proactivity", label:"Proactivity" },
-    { key:"grammar",     label:"Grammar" },
-    { key:"complexity",  label:"Complexity" },
-    { key:"fluency",     label:"Fluency" },
+    { key:"listening",        label:"Listening" },
+    { key:"grammar",          label:"Grammar" },
+    { key:"reading",          label:"Reading" },
+    { key:"oral_confidence",  label:"Confidence" },
+    { key:"speaking_fluency", label:"Fluency" },
+    { key:"speaking_output",  label:"Output" },
   ];
-  const coach = coachFilter;
+
   const filtered = data.filter(r => {
-    if (coach !== "All" && r.coach !== coach) return false;
-    if (r.fecha) {
-      const raw = r.fecha.split(",")[0].trim();
-      const [d,m,y] = raw.split("/");
-      const dt = new Date(+y,+m-1,+d);
-      const from = new Date(dateFrom); from.setHours(0,0,0,0);
-      const to = new Date(dateTo); to.setHours(23,59,59,999);
+    if (coachFilter !== "All" && r.coach !== coachFilter) return false;
+    if (r.class_date) {
+      const dt = new Date(r.class_date + "T00:00:00");
+      const from = new Date(dateFrom + "T00:00:00");
+      const to   = new Date(dateTo   + "T00:00:00"); to.setHours(23,59,59,999);
       if (dt < from || dt > to) return false;
     }
     return true;
-  }).slice().reverse();
-  const isNoShow = r => metrics.every(m => r[m.key] === "1");
+  });
 
   return (
     <div style={{ maxWidth:800, width:"100%" }}>
@@ -2001,9 +2058,8 @@ function ClassFeedbackView({ user, role, setActive }) {
           <span style={{ fontSize:11, color:C.text3 }}>→</span>
           <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{ background:C.surface2, border:`1px solid ${C.border2}`, borderRadius:8, padding:"0.4rem 0.65rem", fontSize:12, color:C.text, fontFamily:"inherit", outline:"none" }} />
         </div>
-        {role !== "coach" && <CoachFilter value={coach} onChange={setCoachFilter} />}
+        {role !== "coach" && <CoachFilter value={coachFilter} onChange={setCoachFilter} />}
       </div>
-      {/* Showing counter — updates when coach is selected */}
       {!loading && (
         <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:"1rem" }}>
           <div style={{ display:"flex", alignItems:"center", gap:5, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:50, padding:"0.3rem 0.75rem" }}>
@@ -2018,25 +2074,48 @@ function ClassFeedbackView({ user, role, setActive }) {
         </div>
       ) : !loading && (
         <div style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
-          {filtered.map((r,i) => (
-            <div key={i} style={{ ...CARD, borderLeft:`3px solid ${COACH_COLORS[r.coach]||C.text3}`, borderRadius:14, padding:"1rem 1.25rem" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", marginBottom:"0.75rem", flexWrap:"wrap" }}>
-                <p style={{ fontSize:12, fontWeight:700, color:COACH_COLORS[r.coach]||C.text2 }}>{r.coach}</p>
-                <p style={{ fontSize:11, color:C.text3 }}>{r.hora_clase}</p>
-                <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:50, background:"rgba(240,236,224,0.06)", border:`1px solid ${C.border2}`, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em" }}>{r.tipo_clase}</span>
-                <p style={{ fontSize:11, color:C.text3, marginLeft:"auto" }}>{r.fecha?.split(",")[0]}</p>
-              </div>
-              {r.proactivity === "1" && r.grammar === "1" && r.complexity === "1" && r.fluency === "1"
-                ? <p style={{ fontSize:12, color:"#e8d07a", fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>No show <span style={{fontSize:10}}>⚠</span></p>
-                : <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:"0.5rem" }}>
-                    {metrics.filter(m => r[m.key] !== undefined && r[m.key] !== "").map(m => (
-                      <div key={m.key}>
-                        <p style={{ fontSize:10, color:C.text3, marginBottom:3, letterSpacing:"0.06em", textTransform:"uppercase" }}>{m.label}</p>
-                        <ScoreBar value={+r[m.key]||0} color={COACH_COLORS[r.coach] || "rgba(240,236,224,0.6)"} />
-                      </div>
-                    ))}
+          {filtered.map((session, i) => (
+            <div key={session.id || i} style={{ ...CARD, borderLeft:`3px solid ${COACH_COLORS[session.coach]||C.text3}`, borderRadius:14, overflow:"hidden" }}>
+              <button onClick={() => setExpanded(expanded===i ? null : i)}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:"0.75rem", padding:"1rem 1.25rem", background:"transparent", border:"none", cursor:"pointer", textAlign:"left", WebkitTapHighlightColor:"transparent" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", flexWrap:"wrap" }}>
+                    <p style={{ fontSize:12, fontWeight:700, color:COACH_COLORS[session.coach]||C.text2 }}>{session.coach}</p>
+                    <p style={{ fontSize:11, color:C.text3 }}>{session.class_time}</p>
+                    <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:50, background:"rgba(240,236,224,0.06)", border:`1px solid ${C.border2}`, color:C.text3, textTransform:"uppercase", letterSpacing:"0.08em" }}>{session.class_type}</span>
+                    <p style={{ fontSize:11, color:C.text3, marginLeft:"auto" }}>{isoFmt(session.class_date)}</p>
                   </div>
-              }
+                  <p style={{ fontSize:11, color:C.text3, marginTop:3 }}>{session.class_session_students?.length || 0} student{session.class_session_students?.length !== 1 ? "s" : ""}</p>
+                </div>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" style={{flexShrink:0, transform:expanded===i?"rotate(180deg)":"rotate(0)", transition:"transform 0.2s"}}>
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </button>
+              {expanded===i && (
+                <div style={{ borderTop:`1px solid ${C.border}` }}>
+                  {(session.class_session_students || []).map((s, j) => (
+                    <div key={j} style={{ padding:"0.75rem 1.25rem", borderBottom: j < session.class_session_students.length-1 ? `1px solid ${C.border}` : "none" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"0.5rem" }}>
+                        <p style={{ fontSize:13, fontWeight:700, color:C.text }}>{s.student_name}</p>
+                        {s.no_show && <span style={{ fontSize:10, fontWeight:700, color:C.amber }}>No show ⚠</span>}
+                      </div>
+                      {!s.no_show && (
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:"0.4rem" }}>
+                          {metrics
+                            .filter(m => m.key !== "reading" || session.has_reading)
+                            .filter(m => s[m.key] != null)
+                            .map(m => (
+                              <div key={m.key}>
+                                <p style={{ fontSize:10, color:C.text3, marginBottom:2, letterSpacing:"0.06em", textTransform:"uppercase" }}>{m.label}</p>
+                                <ScoreBar value={+s[m.key]||0} color={COACH_COLORS[session.coach]||"rgba(240,236,224,0.6)"} />
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -2047,8 +2126,13 @@ function ClassFeedbackView({ user, role, setActive }) {
 
 // STUDENT FEEDBACK VIEW
 function StudentFeedbackView({ user, role, setActive }) {
-  const { data, loading } = useSheet(SHEET_STUDENT);
+  const [data,        setData]        = useState([]);
+  const [loading,     setLoading]     = useState(true);
   const [coachFilter, setCoachFilter] = useState("All");
+  const [search,      setSearch]      = useState("");
+  const [expanded,    setExpanded]    = useState(null);
+  const [dateFrom,    setDateFrom]    = useState(() => getWeekRange().from);
+  const [dateTo,      setDateTo]      = useState(() => getWeekRange().to);
 
   useEffect(() => {
     if (role === "coach" && user?.id) {
@@ -2056,26 +2140,39 @@ function StudentFeedbackView({ user, role, setActive }) {
         .then(({ data }) => { if (data?.nombre) setCoachFilter(data.nombre.split(" ")[0]); });
     }
   }, [role, user?.id]);
-  const [search, setSearch] = useState("");
-  const [expanded, setExpanded] = useState(null);
-  const [dateFrom, setDateFrom] = useState(() => getWeekRange().from);
-  const [dateTo,   setDateTo]   = useState(() => getWeekRange().to);
+
+  useEffect(() => {
+    supabase
+      .from("class_session_students")
+      .select("student_name, performance_note, next_step, no_show, class_sessions(class_date, class_time, coach)")
+      .order("id", { ascending: false })
+      .then(({ data: rows }) => {
+        setData((rows || []).map(r => ({
+          estudiante_nombre: r.student_name,
+          nota:              r.performance_note,
+          next_step:         r.next_step,
+          no_show:           r.no_show,
+          coach:             r.class_sessions?.coach || "",
+          hora_clase:        r.class_sessions?.class_time || "",
+          fecha:             r.class_sessions?.class_date || "",
+        })));
+        setLoading(false);
+      });
+  }, []);
 
   const filtered = data.filter(r => {
     if (coachFilter !== "All" && r.coach !== coachFilter) return false;
     if (search && !r.estudiante_nombre?.toLowerCase().includes(search.toLowerCase())) return false;
     if (r.fecha) {
-      const raw = r.fecha.split(",")[0].trim();
-      const [d,m,y] = raw.split("/");
-      const dt = new Date(+y,+m-1,+d);
-      const from = new Date(dateFrom); from.setHours(0,0,0,0);
-      const to = new Date(dateTo); to.setHours(23,59,59,999);
+      const dt = new Date(r.fecha + "T00:00:00");
+      const from = new Date(dateFrom + "T00:00:00");
+      const to   = new Date(dateTo   + "T00:00:00"); to.setHours(23,59,59,999);
       if (dt < from || dt > to) return false;
     }
     return true;
-  }).slice().reverse();
+  });
 
-  const isNoShow = r => r.nota?.toLowerCase().includes("no show") || r.nota?.toLowerCase().includes("absent");
+  const isNoShow = r => r.no_show === true;
 
   return (
     <div style={{ maxWidth:800, width:"100%" }}>
@@ -2110,7 +2207,7 @@ function StudentFeedbackView({ user, role, setActive }) {
                   </div>
                   <div style={{ display:"flex", gap:"0.5rem", marginTop:2 }}>
                     <p style={{ fontSize:11, color:COACH_COLORS[r.coach]||C.text3, fontWeight:600 }}>{r.coach}</p>
-                    <p style={{ fontSize:11, color:C.text3 }}>{r.hora_clase} · {r.fecha?.split(",")[0]}</p>
+                    <p style={{ fontSize:11, color:C.text3 }}>{r.hora_clase} · {isoFmt(r.fecha)}</p>
                   </div>
                 </div>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" style={{flexShrink:0, transform: expanded===i ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s"}}>
@@ -2135,7 +2232,7 @@ function StudentFeedbackView({ user, role, setActive }) {
 
 // STUDENT SURVEYS VIEW
 function StudentSurveysView({ user, role, setActive }) {
-  const { data, loading } = useSheet(SHEET_SURVEYS);
+  const { data, loading } = useSurveys();
   const [coach, setCoach] = useState("All");
   const [dateFrom, setDateFrom] = useState(() => getWeekRange().from);
   const [dateTo, setDateTo] = useState(() => getWeekRange().to);
@@ -2148,11 +2245,9 @@ function StudentSurveysView({ user, role, setActive }) {
   const filtered = data.filter(r => {
     if (coach !== "All" && r.coach !== coach) return false;
     if (r.fecha) {
-      const raw = r.fecha.split(",")[0].trim();
-      const [d,m,y] = raw.split("/");
-      const dt = new Date(+y,+m-1,+d);
-      const from = new Date(dateFrom); from.setHours(0,0,0,0);
-      const to = new Date(dateTo); to.setHours(23,59,59,999);
+      const dt   = new Date(r.fecha + "T00:00:00");
+      const from = new Date(dateFrom + "T00:00:00");
+      const to   = new Date(dateTo   + "T00:00:00"); to.setHours(23,59,59,999);
       if (dt < from || dt > to) return false;
     }
     return true;
@@ -2193,7 +2288,7 @@ function StudentSurveysView({ user, role, setActive }) {
                 <p style={{ fontSize:13, fontWeight:700, color:C.text }}>{r.nombre}</p>
                 <p style={{ fontSize:11, color:COACH_COLORS[r.coach]||C.text3, fontWeight:600 }}>{r.coach}</p>
                 <p style={{ fontSize:11, color:C.text3 }}>{r.hora_clase}</p>
-                <p style={{ fontSize:11, color:C.text3, marginLeft:"auto" }}>{r.fecha?.split(",")[0]}</p>
+                <p style={{ fontSize:11, color:C.text3, marginLeft:"auto" }}>{isoFmt(r.fecha)}</p>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(130px, 1fr))", gap:"0.5rem", marginBottom: r.comentario ? "0.75rem" : 0 }}>
                 {metrics.map(m => (
@@ -2241,7 +2336,7 @@ const getWeekMonday = (offset) => {
 
 function MiniCalendar({ weekOffset, setWeekOffset, onClose }) {
   const now = new Date();
-  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const MONTHS = MONTHS_SHORT;
   const DAYS = ["M","T","W","T","F","S","S"];
 
   const [viewMonth, setViewMonth] = useState(() => getWeekMonday(weekOffset).getMonth());
@@ -2406,23 +2501,12 @@ function MasterSchedule({ role, user }) {
     ? rawEvents.filter(ev => ev.coach === coachFilterName)
     : rawEvents;
 
-  const coachColors = {
-    Ana:      "#f4a7b9",
-    Ricardo:  "#4fc3f7",
-    Jesse:    "#b7e4a0",
-    Gabriela: "#ce93d8",
-    Gaby:     "#ce93d8",
-    Mafer:    "#1a73e8",
-  };
+  const coachColors = { ...getCoachColors() };
+  if (coachColors.Gabriela) coachColors.Gaby = coachColors.Gabriela; // alias legacy
   const URGENTE_COLOR = "#c20000";
 
-  const coachEmails = {
-    "ana@dilo.club":      "Ana",
-    "ricardo@dilo.club":  "Ricardo",
-    "jesse@dilo.club":    "Jesse",
-    "gabriela@dilo.club": "Gabriela",
-    "mafer@dilo.club":    "Mafer",
-  };
+  // Convención: email = nombre en minúscula @dilo.club
+  const coachEmails = Object.fromEntries(getCoachNames().map(n => [n.toLowerCase() + "@dilo.club", n]));
 
   // Get week dates for current offset
   const getWeekDates = (offset = 0) => {
@@ -2473,7 +2557,7 @@ function MasterSchedule({ role, user }) {
           body: JSON.stringify({ source: "teams", startDateTime: mStart.toISOString(), endDateTime: mEnd.toISOString() })
         }).then(r=>r.json()).then(d => {
           if (!cancelled && Array.isArray(d) && d.length > 0) {
-            const evs = d.map(ev => ({ ...ev, date: new Date(new Date(ev.start).getTime() - 6*60*60*1000) })).filter(ev => !isNaN(ev.date));
+            const evs = d.map(ev => ({ ...ev, date: toCRDate(ev.start) })).filter(ev => !isNaN(ev.date));
             _monthCache = evs;
             setMonthEvents(evs);
           }
@@ -2519,7 +2603,7 @@ function MasterSchedule({ role, user }) {
           const data = JSON.parse(text);
           const evs = data.map(ev => ({
             uid: ev.uid||(ev.summary||"")+(ev.start||""),
-            summary: ev.summary||"Sin título", date: new Date(new Date(ev.start).getTime()-6*60*60*1000),
+            summary: ev.summary||"Sin título", date: toCRDate(ev.start),
             coach: ev.coach||"Unassigned", nivel:"", estudiantes: ev.estudiantes||"",
             joinUrl: ev.joinUrl||null, urgente: false
           })).filter(ev => !isNaN(ev.date.getTime()));
@@ -2542,7 +2626,7 @@ function MasterSchedule({ role, user }) {
     const applyData = (data) => {
       if (data && Array.isArray(data)) {
         const evs = data.map(ev => {
-          const crDate = new Date(new Date(ev.start).getTime() - 6 * 60 * 60 * 1000);
+          const crDate = toCRDate(ev.start);
           return { uid: ev.uid || ev.summary + ev.start, summary: ev.summary || "Sin título", date: crDate, coach: ev.coach || "Unassigned", nivel: "", estudiantes: ev.estudiantes || "", joinUrl: ev.joinUrl || null, urgente: false };
         }).filter(ev => ev.date && !isNaN(ev.date.getTime()));
         if (evs.length > 0) _schedCache[weekOffset] = evs; // never cache empty — empty means error/throttle
@@ -2626,7 +2710,7 @@ function MasterSchedule({ role, user }) {
   };
 
   const [showCal, setShowCal] = useState(false);
-  const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const mo = MONTHS_SHORT;
   const weekLabel = weekDates[0].getMonth() === weekDates[5].getMonth()
     ? `${weekDates[0].getDate()} – ${weekDates[5].getDate()} ${mo[weekDates[0].getMonth()]}, ${weekDates[0].getFullYear()}`
     : `${weekDates[0].getDate()} ${mo[weekDates[0].getMonth()]} – ${weekDates[5].getDate()} ${mo[weekDates[5].getMonth()]}, ${weekDates[0].getFullYear()}`;
@@ -2714,8 +2798,8 @@ function MasterSchedule({ role, user }) {
 
       {/* Stats below calendar — admin only */}
       {!loading && !error && events.length > 0 && role !== "coach" && (() => {
-        const coachColors = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
-        const coaches = ["Ana","Ricardo","Jesse","Gabriela","Mafer"];
+        const coachColors = getCoachColors();
+        const coaches = getCoachNames();
         const weekEvents = events;
 
         // Admin view
@@ -3367,7 +3451,7 @@ function ProfileView({ user, defaultSection = "bio", setActive }) {
     setSaving(false);
     if (error) {
       console.error("Profile save error:", error);
-      alert("Error al guardar: " + error.message);
+      toast("Error al guardar: " + error.message);
     } else {
       setProfile(p => ({ ...p, nombre: form.nombre, apellido: form.apellido, teams_email: form.teams_email }));
       setSaved(true);
@@ -3903,10 +3987,13 @@ function SettingsView({ user, setActive }) {
 }
 
 // ── USER MENU ─────────────────────────────────────────────────
+let AVATAR_COLORS = getCoachColors();
+
 function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCollapsed, unreadWA = 0, setUnreadWA }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const initial = (user?.nombre || user?.email || "U")[0].toUpperCase();
+  const avatarColor = role === "coach" ? (AVATAR_COLORS[user?.nombre] || C.text2) : C.text2;
 
   useEffect(() => {
     const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -3916,19 +4003,18 @@ function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCol
   }, []);
 
   return (
-    <div ref={ref} style={{ padding: "0.5rem", borderTop: `1px solid ${C.border}`, flexShrink: 0, position: "relative" }}>
+    <div ref={ref} style={{ padding: "0.25rem 0.4rem", borderTop: `1px solid ${C.border}`, flexShrink: 0, position: "relative" }}>
       {/* Popup menu */}
       {open && (
-        <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "0.5rem", right: "0.5rem", background: C.surface2, border: `1px solid ${C.border2}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 100 }}>
+        <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: "0.4rem", right: "0.4rem", background: C.surface2, border: `1px solid ${C.border2}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", zIndex: 100 }}>
           {/* User info header */}
-          <div style={{ padding: "0.85rem 1rem", borderBottom: `1px solid ${C.border}` }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ padding: "0.65rem 0.85rem", borderBottom: `1px solid ${C.border}` }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {user?.nombre ? `${user.nombre}${user.apellido ? " " + user.apellido : ""}` : user?.email?.split("@")[0] || "Usuario"}
             </p>
-            <p style={{ fontSize: 11, color: C.text3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }}>
+            <p style={{ fontSize: 10, color: C.text3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {user?.email || ""}
             </p>
-            <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.06em", color: C.text3, opacity: 0.5 }}>Version 1.1</p>
           </div>
           {/* Menu items */}
           {[
@@ -3956,23 +4042,18 @@ function UserMenu({ user, role, collapsed, isMobile, onLogout, setActive, setCol
 
       {/* Trigger button */}
       <button onClick={() => setOpen(o => !o)}
-        style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.75rem", padding: collapsed && !isMobile ? "0.5rem" : "0.6rem 0.75rem", borderRadius: 10, border: "none", background: open ? C.surface2 : "transparent", cursor: "pointer", justifyContent: collapsed && !isMobile ? "center" : "flex-start", WebkitTapHighlightColor: "transparent", transition: "background 0.15s" }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%", background: C.surface2, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.text2 }}>{initial}</span>
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: "0.6rem", padding: collapsed && !isMobile ? "0.35rem" : "0.35rem 0.5rem", borderRadius: 8, border: "none", background: open ? C.surface2 : "transparent", cursor: "pointer", justifyContent: collapsed && !isMobile ? "center" : "flex-start", WebkitTapHighlightColor: "transparent", transition: "background 0.15s" }}>
+        <div style={{ width: 24, height: 24, borderRadius: "50%", background: avatarColor + "22", border: `1px solid ${avatarColor}55`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: avatarColor }}>{initial}</span>
         </div>
         {(!collapsed || isMobile) && (
-          <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {user?.nombre || user?.email?.split("@")[0] || "Usuario"}
-              {role && <span style={{ fontWeight: 400, color: C.text3 }}> · {role}</span>}
-            </p>
-            <p style={{ fontSize: 10, color: C.text3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {user?.email || ""}
-            </p>
-          </div>
+          <p style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {user?.nombre || user?.email?.split("@")[0] || "Usuario"}
+            {role && <span style={{ fontWeight: 400, color: C.text3 }}> · {role}</span>}
+          </p>
         )}
         {(!collapsed || isMobile) && (
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round">
             <polyline points="18 15 12 9 6 15"/>
           </svg>
         )}
@@ -4009,7 +4090,6 @@ function Sidebar({ role, user, active, setActive, collapsed, setCollapsed, isMob
         zIndex: 50,
         flexShrink: 0,
         WebkitOverflowScrolling: "touch",
-        paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         {/* Logo area */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", borderBottom: `1px solid ${C.border}`, flexShrink: 0, justifyContent: collapsed && !isMobile ? "center" : "flex-start", minHeight: 57, padding: "0 0.75rem" }}>
@@ -4026,7 +4106,15 @@ function Sidebar({ role, user, active, setActive, collapsed, setCollapsed, isMob
 
         {/* Nav */}
         <nav style={{ flex: 1, padding: "0.5rem", overflowY: "auto", overflowX: "hidden", scrollbarWidth: "none" }}>
-          {navItems.map(item => {
+          {navItems.map((item, idx) => {
+            if (item.section) {
+              if (collapsed && !isMobile) return null;
+              return (
+                <p key={"sec-" + idx} style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text3, padding: idx === 0 ? "0.5rem 0.75rem 0.25rem" : "1rem 0.75rem 0.25rem" }}>
+                  {item.section}
+                </p>
+              );
+            }
             const isActive = active === item.id || item.children?.some(c => c.id === active);
             const isChildActive = item.children?.some(c => c.id === active);
             const [expanded, setExpanded] = React.useState(isChildActive);
@@ -4097,6 +4185,7 @@ function Sidebar({ role, user, active, setActive, collapsed, setCollapsed, isMob
 
         {/* User menu bottom */}
         <UserMenu user={user} role={role} collapsed={collapsed} isMobile={isMobile} onLogout={onLogout} setActive={setActive} setCollapsed={setCollapsed} unreadWA={unreadWA} setUnreadWA={setUnreadWA} />
+        <div style={{ height: "env(safe-area-inset-bottom)", flexShrink: 0 }} />
       </aside>
     </>
   );
@@ -4114,8 +4203,8 @@ function NextClassesView({ user, role }) {
   const [coachName,    setCoachName]    = useState(user?.nombre || "");
   const [coachFilter,  setCoachFilter]  = useState("All");
 
-  const COACHES      = ["Ana","Ricardo","Jesse","Gabriela","Mafer"];
-  const COACH_COLORS = { Ana:"#f4a7b9", Ricardo:"#4fc3f7", Jesse:"#b7e4a0", Gabriela:"#ce93d8", Mafer:"#1a73e8" };
+  const COACHES      = getCoachNames();
+  const COACH_COLORS = getCoachColors();
 
   const getDayBounds = (offset) => {
     const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(0,0,0,0);
@@ -4128,7 +4217,7 @@ function NextClassesView({ user, role }) {
     method:"POST", headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
     body: JSON.stringify({ source:"teams", startDateTime: s.toISOString(), endDateTime: e.toISOString() })
   }).then(r=>r.json()).then(d =>
-    Array.isArray(d) ? d.map(ev=>({...ev, date: new Date(new Date(ev.start).getTime()-6*60*60*1000)})).filter(ev=>!isNaN(ev.date)) : []
+    Array.isArray(d) ? d.map(ev=>({...ev, date: toCRDate(ev.start)})).filter(ev=>!isNaN(ev.date)) : []
   ).catch(()=>[]);
 
   // Mount: coach name + student notes + previous week (for cross-check)
@@ -4138,10 +4227,28 @@ function NextClassesView({ user, role }) {
           .then(({ data }) => data?.nombre || user?.nombre || "")
       : Promise.resolve("");
 
-    const notesP = fetch(EDGE_URL, {
-      method:"POST", headers:{"Authorization":"Bearer "+ANON_KEY,"apikey":ANON_KEY,"Content-Type":"application/json"},
-      body: JSON.stringify({ source:"sheets", sheetId: SHEET_STUDENT })
-    }).then(r=>r.json()).then(d => Array.isArray(d) ? d : []).catch(()=>[]);
+    const notesP = supabase
+      .from("class_session_students")
+      .select("student_name, performance_note, next_step, no_show, class_sessions(class_date, class_time, coach, class_type, class_title)")
+      .then(({ data }) => (data || [])
+        .map(r => {
+          const d = r.class_sessions?.class_date
+            ? new Date(r.class_sessions.class_date + "T00:00:00")
+            : null;
+          return {
+            estudiante_nombre: r.student_name,
+            nota:              r.performance_note,
+            next_step:         r.next_step,
+            coach:             r.class_sessions?.coach       || "",
+            hora_clase:        r.class_sessions?.class_time  || "",
+            fecha:             r.class_sessions?.class_date  || "",
+            class_type:        r.class_sessions?.class_type  || "",
+            class_title:       r.class_sessions?.class_title || "",
+            _date:             d,
+          };
+        })
+        .filter(r => r._date && !isNaN(r._date))
+      ).catch(() => []);
 
     // Previous week + current week (Mon→now) for cross-check
     const now = new Date(); const dow = now.getDay();
@@ -4160,15 +4267,7 @@ function NextClassesView({ user, role }) {
 
     Promise.all([nameP, notesP, prevP, currP]).then(([name, notes, prevEvs, currEvs]) => {
       if (name) setCoachName(name);
-      setStudentNotes(
-        notes.filter(r => r.fecha && r.estudiante_nombre && r.coach && r.hora_clase)
-          .map(r => {
-            const raw = r.fecha.split(",")[0].trim();
-            const [d, m, y] = raw.split("/");
-            return { ...r, _date: new Date(+y, +m-1, +d) };
-          })
-          .filter(r => !isNaN(r._date))
-      );
+      setStudentNotes(notes);
       setPrevWeekEvs(prevEvs);
       setCurrWeekEvs(currEvs);
       setLoadingInit(false);
@@ -4180,13 +4279,6 @@ function NextClassesView({ user, role }) {
     if (dayCache[dayOffset] !== undefined) { setLoadingDay(false); return; }
     setLoadingDay(true);
     fetchTeams(dayStart, dayEnd).then(evs => {
-      // DEBUG — ver raw start string vs fecha computada para detectar bug de timezone
-      console.table(evs.map(ev => ({
-        summary:  ev.summary,
-        raw_start: ev.start,                               // string crudo de Teams/Graph
-        computed:  ev.date ? ev.date.toISOString() : "ERR", // después de -6h
-        display:   ev.date ? ev.date.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",hour12:true}) : "ERR",
-      })));
       setDayCache(c => ({ ...c, [dayOffset]: evs }));
       setLoadingDay(false);
     });
@@ -4240,16 +4332,77 @@ function NextClassesView({ user, role }) {
     const clsH = cls.date.getHours(), clsM = cls.date.getMinutes();
     const clsSum = (cls.summary||"").toLowerCase().trim();
     const clsSeriesId = cls.seriesId || null;
-    // NOTE: clsCoach is NOT used to filter past-event candidates — coaches may rotate.
-    // The coach of the past event (ev.coach) is what matters for the Sheet cross-check.
     const currentTokens = getTokenSet(cls.estudiantes);
+    const tStrCls = `${clsH%12||12}:${String(clsM).padStart(2,"0")} ${clsH>=12?"PM":"AM"}`;
 
-    // 1️⃣ Primary match: same recurring series (coach-agnostic — coaches may rotate)
+    // Group classes always start with a digit (e.g. "03A2 - Your English Class").
+    // Private classes start with a letter (e.g. "A1 - Your English Class Melissa").
+    const isGroupClass = /^\d/.test((cls.summary||"").trim());
+
+    const normStr = s => s.normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+    // Tokens from class title — private class titles include the student name, which
+    // normalized matches the student_name field reliably (handles accents like Fráncel).
+    const summaryTokens = new Set(
+      (cls.summary||"").split(/\s+/)
+        .map(w => normStr(w.toLowerCase()).replace(/[^a-z]/g,''))
+        .filter(w => w.length >= 3)
+    );
+
+    const studentMatches = (r) => {
+      const nt = normStr(toToken(r.estudiante_nombre || ""));
+      if (summaryTokens.has(nt)) return true;
+      return [...currentTokens].some(ct => {
+        const nct = normStr(ct);
+        return nt === nct || nt.startsWith(nct) || nct.startsWith(nt);
+      });
+    };
+
+    // ── Path A: private class — most recent notes by student name ────────────
+    // No time constraint: private classes get rescheduled; the student name is the
+    // reliable identifier. Group classes skip directly to Path B.
+    if (!isGroupClass) {
+      const byName = studentNotes
+        .filter(r => r._date < nowTs && studentMatches(r))
+        .sort((a, b) => b._date - a._date);
+      if (byName.length > 0) {
+        const latestMs = byName[0]._date.getTime();
+        return byName.filter(r => r._date.getTime() === latestMs);
+      }
+    }
+
+    // ── Path A group: match by group code stored in class_title ─────────────
+    // Group classes always start with a numeric code (e.g. "03A2"). That code is
+    // saved as class_title when the coach submits feedback. This is the most direct
+    // way to find all sessions for a group regardless of coach, time, or date.
+    if (isGroupClass) {
+      // Extract only the numeric group number (e.g. "03" from "03A2 - Your English Class").
+      // Matching by group number instead of the full code means notes survive level changes:
+      // group 03 at level A2 and at level B1 are the same students.
+      const groupNum = ((cls.summary||"").match(/^(\d+)/)||[])[1]||"";
+      if (groupNum) {
+        const groupNotes = studentNotes
+          .filter(r => r._date < nowTs && (r.class_title||"").startsWith(groupNum))
+          .sort((a, b) => b._date - a._date);
+        if (groupNotes.length > 0) {
+          const latestMs = groupNotes[0]._date.getTime();
+          const latestTime = groupNotes[0].hora_clase;
+          return groupNotes.filter(r =>
+            r._date.getTime() === latestMs && r.hora_clase === latestTime
+          );
+        }
+      }
+    }
+
+    // ── Path B: Teams pool search ─────────────────────────────────────────────
+    // Primary path for group classes without class_title yet (legacy records).
+    // Fallback for private classes (Path A found nothing).
+    // 1️⃣ Series ID match (coach-agnostic — coaches rotate on the same recurring slot)
     const bySeriesId = clsSeriesId
       ? pool.filter(ev => ev.seriesId && ev.seriesId === clsSeriesId).sort((a,b)=>b.date-a.date)
       : [];
 
-    // 2️⃣ Fallback: same time slot, coach-agnostic (student overlap check guards precision)
+    // 2️⃣ Time slot match (coach-agnostic; student overlap check guards precision)
     const matchT = ev => ev.date.getHours() === clsH && ev.date.getMinutes() === clsM;
     const matchS = ev => { const s=(ev.summary||"").toLowerCase().trim(); return !clsSum||!s||s===clsSum; };
 
@@ -4259,29 +4412,35 @@ function NextClassesView({ user, role }) {
     })();
 
     for (const ev of candidates) {
-      // ── Rule 1: student overlap check ──────────────────────────
+      // Rule 1: student overlap check
       const pastTokens = getTokenSet(ev.estudiantes);
-      if (currentTokens.size > 0 && pastTokens.size > 0) {
-        const hasOverlap = [...currentTokens].some(ct =>
-          [...pastTokens].some(pt => ct === pt || ct.startsWith(pt) || pt.startsWith(ct))
-        );
-        if (!hasOverlap) continue; // Completely different students → skip
+      if (currentTokens.size > 0) {
+        if (pastTokens.size === 0) {
+          // Teams has no attendee data for this past event.
+          // Group classes: can't verify → skip.
+          // Private classes: studentMatches in Rule 2 will guard precision.
+          if (isGroupClass) continue;
+        } else {
+          const hasOverlap = [...currentTokens].some(ct =>
+            [...pastTokens].some(pt => ct === pt || ct.startsWith(pt) || pt.startsWith(ct))
+          );
+          if (!hasOverlap) continue;
+        }
       }
 
-      // ── Sheet cross-check usando ventana lazy (día a día) ─────
-      // col C format: hora exacta del evento pasado (12h AM/PM)
       const h = ev.date.getHours(), m = ev.date.getMinutes();
       const tStr = `${h%12||12}:${m.toString().padStart(2,"0")} ${h>=12?"PM":"AM"}`;
       const evDay = new Date(ev.date); evDay.setHours(0,0,0,0);
 
-      // Ventana lazy: busca día 0 primero; avanza solo si no hay notas.
-      // Evita capturar notas de otra clase del mismo coach+hora el día siguiente.
+      // Lazy day search: day 0 first, advance only if empty (prevents capturing a
+      // different student's notes submitted the next day at the same time slot).
+      const evStudentCount = (ev.estudiantes||"").split(/[,;&\/]/).map(s=>s.trim()).filter(s=>s.length>2).length;
+      const evClassType = evStudentCount > 1 ? "Group" : evStudentCount === 1 ? "Private" : null;
       const matchDay = d => studentNotes.filter(r =>
         r._date.getTime() === d.getTime() && r._date < nowTs &&
-        // col B: coach del EVENTO PASADO (ev.coach), no el de la clase actual
         r.coach.split(" ")[0] === ev.coach &&
-        // col C: hora exacta del evento pasado
-        (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase()
+        (r.hora_clase||"").trim().replace(/\s+/g," ").toUpperCase() === tStr.toUpperCase() &&
+        (!evClassType || !r.class_type || r.class_type === evClassType)
       );
       const d0 = matchDay(evDay);
       const evDay1 = new Date(evDay); evDay1.setDate(evDay.getDate()+1);
@@ -4291,20 +4450,29 @@ function NextClassesView({ user, role }) {
       const notes = d0.length > 0 ? d0 : d1.length > 0 ? d1 : d2;
       if (notes.length === 0) continue;
 
-      // ── Rule 2: excluir notas de estudiantes que salieron ──────
-      // Filtro negativo: falla silencioso (muestra de más, nunca oculta válidos)
-      const droppedTokens = [...pastTokens].filter(pt =>
-        !([...currentTokens].some(ct => ct === pt || ct.startsWith(pt) || pt.startsWith(ct)))
-      );
-      const filteredNotes = droppedTokens.length > 0
-        ? notes.filter(r => {
-            const nt = (r.estudiante_nombre||"").split(" ")[0].toLowerCase();
-            return !droppedTokens.some(d => nt === d || nt.startsWith(d) || d.startsWith(nt));
-          })
+      // Rule 2: private class → filter to the specific student (drops ex-students).
+      //         Group class  → return the full session (student name matching is
+      //                        unreliable against email tokens like "cinmontoyac").
+      const filteredNotes = !isGroupClass
+        ? notes.filter(r => studentMatches(r))
         : notes;
 
       if (filteredNotes.length > 0) return filteredNotes;
-      // If all notes were for dropped students → continue searching older events
+    }
+
+    // ── Last resort: group class, Teams pool empty ────────────────────────────
+    // Path B found nothing (class last occurred > 2 weeks ago or Teams returned no data).
+    // Coaches rotate on group slots, so we drop the coach filter and return the most
+    // recent session at this exact time slot.
+    if (isGroupClass) {
+      const byTime = studentNotes
+        .filter(r => r._date < nowTs
+          && (r.hora_clase||"").trim().toUpperCase() === tStrCls.toUpperCase())
+        .sort((a, b) => b._date - a._date);
+      if (byTime.length > 0) {
+        const latestMs = byTime[0]._date.getTime();
+        return byTime.filter(r => r._date.getTime() === latestMs);
+      }
     }
     return [];
   };
@@ -4396,7 +4564,7 @@ function NextClassesView({ user, role }) {
                         <div key={j} style={{ borderLeft:`2px solid ${C.border2}`, paddingLeft:"0.75rem" }}>
                           <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"0.35rem", flexWrap:"wrap" }}>
                             <p style={{ fontSize:12, fontWeight:700, color:C.text }}>{r.estudiante_nombre}</p>
-                            <p style={{ fontSize:10, color:C.text3 }}>{r.fecha?.split(",")[0]}</p>
+                            <p style={{ fontSize:10, color:C.text3 }}>{isoFmt(r.fecha)}</p>
                           </div>
                           {r.nota && (
                             <p style={{ fontSize:11, color:C.text2, lineHeight:1.5, marginBottom:r.next_step?"0.3rem":0 }}>
@@ -4450,11 +4618,18 @@ function DinamicasView({ user }) {
   const [previewSlide, setPreviewSlide] = useState(0);
   const [slidesToDelete, setSlidesToDelete] = useState([]);
   const chanRef = useRef(null);
+  const rtfRef  = useRef(null);
 
   const BTN  = { background: C.text, color: C.bg, border: "none", borderRadius: 50, fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", padding: "8px 18px", cursor: "pointer", minHeight: 38, whiteSpace: "nowrap" };
   const GHOST = { background: "transparent", border: `1px solid ${C.border2}`, borderRadius: 50, fontFamily: "inherit", fontSize: 12, fontWeight: 600, color: C.text2, padding: "6px 14px", cursor: "pointer", minHeight: 34, whiteSpace: "nowrap" };
 
   useEffect(() => { loadDecks(); return () => { if (chanRef.current) supabase.removeChannel(chanRef.current); }; }, []);
+
+  useEffect(() => {
+    if (rtfRef.current && sub === 'editor' && editDeck && editingSlide !== null) {
+      rtfRef.current.innerHTML = editDeck.slides[editingSlide]?.question || '';
+    }
+  }, [editingSlide, sub]);
 
   async function loadDecks() {
     setLoading(true);
@@ -4522,16 +4697,24 @@ function DinamicasView({ user }) {
       setSub('list');
     } catch (err) {
       console.error('[save] ERROR:', err.message);
-      alert('Save error: ' + err.message);
+      toast('Save error: ' + err.message);
     }
     setSaving(false);
   }
 
   async function deleteDeck(id) {
+    const { data: slideRows } = await supabase.from('slides').select('id').eq('deck_id', id);
+    const slideIds = (slideRows || []).map(s => s.id);
+    if (slideIds.length > 0) {
+      const { error: rErr } = await supabase.from('responses').delete().in('slide_id', slideIds);
+      if (rErr) { toast('Error deleting responses: ' + rErr.message); return; }
+    }
     const { error: sErr } = await supabase.from('slides').delete().eq('deck_id', id);
-    if (sErr) { alert('Error deleting slides: ' + sErr.message); return; }
+    if (sErr) { toast('Error deleting slides: ' + sErr.message); return; }
+    const { error: seErr } = await supabase.from('sessions').delete().eq('deck_id', id);
+    if (seErr) { toast('Error deleting sessions: ' + seErr.message); return; }
     const { error: dErr } = await supabase.from('decks').delete().eq('id', id);
-    if (dErr) { alert('Error deleting deck: ' + dErr.message); return; }
+    if (dErr) { toast('Error deleting deck: ' + dErr.message); return; }
     loadDecks();
   }
 
@@ -4621,7 +4804,7 @@ function DinamicasView({ user }) {
     setResponses([]);
     setSub('host');
     if (chanRef.current) supabase.removeChannel(chanRef.current);
-    chanRef.current = supabase.channel('host-' + sess.id)
+    chanRef.current = supabase.channel('session-' + sess.id)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_participants', filter: `session_id=eq.${sess.id}` }, p => setParticipants(prev => [...prev, p.new]))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'responses', filter: `session_id=eq.${sess.id}` }, p => setResponses(prev => {
         const filtered = prev.filter(r => !(r.participant_id === p.new.participant_id && r.slide_id === p.new.slide_id));
@@ -4658,9 +4841,9 @@ function DinamicasView({ user }) {
   if (sub === 'list') return (
     <div style={{ maxWidth: 760, width: '100%' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-        <p style={{ fontSize: 13, color: C.text2 }}>Interactive presentations for your live classes.</p>
-        <button onClick={createDeck} style={{ ...BTN, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Icon name="plus" size={13} color={C.bg} /> New
+        <p style={{ fontSize: 15, color: C.text2 }}>Interactive presentations for your live classes.</p>
+        <button onClick={createDeck} style={{ background: C.green, border: 'none', borderRadius: 50, color: '#0d0b08', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 20px', cursor: 'pointer', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          + New
         </button>
       </div>
       {loading ? <p style={{ color: C.text2, fontSize: 13 }}>Loading...</p>
@@ -4683,7 +4866,7 @@ function DinamicasView({ user }) {
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button onClick={() => openEditor(d)} style={GHOST}>Edit</button>
-                  <button onClick={() => startSession(d.id, d.title)} style={BTN}>▶ Start</button>
+                  <button onClick={() => startSession(d.id, d.title)} style={BTN}>Start</button>
                   <button onClick={() => deleteDeck(d.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 18, padding: '0 4px', lineHeight: 1 }}>×</button>
                 </div>
               </div>
@@ -4698,24 +4881,34 @@ function DinamicasView({ user }) {
     const slide = editingSlide !== null ? editDeck.slides[editingSlide] : null;
     return (
       <div style={{ maxWidth: 860, width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-          <button onClick={() => { loadDecks(); setSub('list'); }} style={{ ...GHOST, flexShrink: 0 }}>← Back</button>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+            <button onClick={() => { loadDecks(); setSub('list'); }} style={{ background: 'transparent', border: `1px solid ${C.border2}`, borderRadius: 50, color: C.text2, fontFamily: 'inherit', fontSize: 16, fontWeight: 700, padding: '4px 14px', cursor: 'pointer', lineHeight: 1 }}>‹</button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => { setPreviewSlide(editingSlide ?? 0); setSub('preview'); }}
+                style={{ background: 'rgba(240,236,224,0.08)', border: `1px solid rgba(240,236,224,0.2)`, borderRadius: 50, color: C.text, fontFamily: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 20px', cursor: 'pointer', letterSpacing: '0.04em' }}>
+                Preview
+              </button>
+              <button onClick={saveDeck} disabled={saving}
+                style={{ background: C.green, border: 'none', borderRadius: 50, color: '#0d0b08', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, padding: '7px 20px', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.5 : 1, letterSpacing: '0.04em' }}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {titleEditing ? (
               <input autoFocus value={editDeck.title}
                 onChange={e => setEditDeck(p => ({ ...p, title: e.target.value }))}
                 onBlur={() => setTitleEditing(false)}
                 onKeyDown={e => e.key === 'Enter' && setTitleEditing(false)}
-                style={{ flex: 1, background: `rgba(240,236,224,0.05)`, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 16, fontWeight: 700, color: C.text, fontFamily: 'inherit', outline: 'none' }} />
+                style={{ flex: 1, background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 18, fontWeight: 700, color: C.text, fontFamily: 'inherit', outline: 'none' }} />
             ) : (
               <>
-                <p style={{ fontSize: 16, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{editDeck.title || 'Untitled'}</p>
-                <button onClick={() => setTitleEditing(true)} title="Rename" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 14, padding: '2px 4px', lineHeight: 1, flexShrink: 0 }}>✎</button>
+                <p style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{editDeck.title || 'Untitled'}</p>
+                <button onClick={() => setTitleEditing(true)} title="Rename" style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.text3, fontSize: 14, padding: '2px 4px', lineHeight: 1 }}>✎</button>
               </>
             )}
           </div>
-          <button onClick={() => { setPreviewSlide(editingSlide ?? 0); setSub('preview'); }} style={{ ...GHOST, flexShrink: 0 }}>Preview</button>
-          <button onClick={saveDeck} disabled={saving} style={{ ...BTN, flexShrink: 0, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
@@ -4728,7 +4921,7 @@ function DinamicasView({ user }) {
                   {({story:'Story',story_choice:'Choice',open_question:'Open',info:'Info',multiple_choice:'Quiz'})[s.type] || s.type} · {i + 1}
                 </p>
                 <p style={{ fontSize: 12, color: s.question ? C.text2 : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 148 }}>
-                  {s.question || 'Sin texto'}
+                  {s.question ? s.question.replace(/<[^>]+>/g, '') : 'Sin texto'}
                 </p>
               </button>
             ))}
@@ -4760,21 +4953,39 @@ function DinamicasView({ user }) {
                   </button>
                 </div>
 
-                {/* Question / Content */}
+                {/* Question / Content — rich text editor */}
                 <div>
                   <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.text3, display: 'block', marginBottom: 5 }}>
                     {slide.type === 'info' ? 'Content' : slide.type === 'story' ? 'Narration' : 'Question'}
                   </label>
-                  <textarea value={slide.question} onChange={e => updateSlide(editingSlide, 'question', e.target.value)}
-                    placeholder={
-                      slide.type === 'info' ? 'Information for students...' :
-                      slide.type === 'story' ? 'Write the story narration here...' :
-                      slide.type === 'story_choice' ? 'What should the protagonist do?' :
-                      slide.type === 'open_question' ? 'How would you feel if...?' :
-                      'What is the correct form of...?'
-                    }
-                    rows={slide.type === 'story' ? 5 : 3}
-                    style={{ width: '100%', background: 'rgba(240,236,224,0.05)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 12px', color: C.text, fontSize: 14, fontFamily: 'inherit', resize: 'none', outline: 'none' }} />
+                  <div style={{ border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden', background: 'rgba(240,236,224,0.05)' }}>
+                    {/* Toolbar */}
+                    <div style={{ display: 'flex', gap: 2, padding: '5px 8px', borderBottom: `1px solid ${C.border}`, background: 'rgba(240,236,224,0.03)' }}>
+                      {[
+                        { cmd: 'bold',          label: <b>B</b> },
+                        { cmd: 'italic',        label: <i>I</i> },
+                        { cmd: 'underline',     label: <u>U</u> },
+                        { cmd: 'insertUnorderedList', label: '≡' },
+                      ].map(({ cmd, label }) => (
+                        <button key={cmd} onMouseDown={e => { e.preventDefault(); document.execCommand(cmd, false, null); rtfRef.current?.focus(); updateSlide(editingSlide, 'question', rtfRef.current?.innerHTML || ''); }}
+                          style={{ background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 5, color: C.text2, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, padding: '2px 8px', lineHeight: 1.4 }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Editable area */}
+                    <div ref={rtfRef} contentEditable suppressContentEditableWarning
+                      onInput={() => updateSlide(editingSlide, 'question', rtfRef.current?.innerHTML || '')}
+                      style={{ minHeight: slide.type === 'story' ? 110 : 72, padding: '9px 12px', color: C.text, fontSize: 14, fontFamily: 'inherit', outline: 'none', lineHeight: 1.6 }}
+                      data-placeholder={
+                        slide.type === 'info'         ? 'Information for students...' :
+                        slide.type === 'story'        ? 'Write the story narration here...' :
+                        slide.type === 'story_choice' ? 'What should the protagonist do?' :
+                        slide.type === 'open_question'? 'How would you feel if...?' :
+                        'What is the correct form of...?'
+                      }
+                    />
+                  </div>
                 </div>
 
                 {/* Options — MC */}
@@ -4954,17 +5165,18 @@ function DinamicasView({ user }) {
 
               {/* Story / Info: large text */}
               {(pvSlide.type === 'story' || pvSlide.type === 'info') && (
-                <p style={{ fontSize: 15, fontWeight: pvSlide.type === 'story' ? 400 : 500, color: '#f0ece0', lineHeight: 1.65, textAlign: 'center', maxWidth: 320 }}>
-                  {pvSlide.question || <span style={{ color: 'rgba(240,236,224,0.2)' }}>No text yet</span>}
-                </p>
+                pvSlide.question
+                  ? <div dangerouslySetInnerHTML={{ __html: pvSlide.question }} style={{ fontSize: 15, fontWeight: pvSlide.type === 'story' ? 400 : 500, color: '#f0ece0', lineHeight: 1.65, textAlign: 'center', maxWidth: 320 }} />
+                  : <span style={{ color: 'rgba(240,236,224,0.2)', fontSize: 15 }}>No text yet</span>
               )}
 
               {/* Question-based types */}
               {['story_choice','multiple_choice','open_question'].includes(pvSlide.type) && (
                 <>
-                  <p style={{ fontSize: 16, fontWeight: 700, color: '#f0ece0', textAlign: 'center', marginBottom: '1.5rem', lineHeight: 1.35, maxWidth: 320 }}>
-                    {pvSlide.question || <span style={{ color: 'rgba(240,236,224,0.2)' }}>No question yet</span>}
-                  </p>
+                  {pvSlide.question
+                    ? <div dangerouslySetInnerHTML={{ __html: pvSlide.question }} style={{ fontSize: 16, fontWeight: 700, color: '#f0ece0', textAlign: 'center', marginBottom: '1.5rem', lineHeight: 1.35, maxWidth: 320 }} />
+                    : <span style={{ color: 'rgba(240,236,224,0.2)', fontSize: 16, marginBottom: '1.5rem' }}>No question yet</span>
+                  }
 
                   {/* Choice / MC buttons */}
                   {(pvSlide.type === 'story_choice' || pvSlide.type === 'multiple_choice') && (
@@ -5036,7 +5248,7 @@ function DinamicasView({ user }) {
           <div style={{ ...CARD, borderRadius: 14, padding: '1.25rem', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: C.text2 }}>Waiting room — {participants.length} connected</p>
-              <button onClick={() => setStatus('active')} disabled={participants.length === 0} style={{ ...BTN, opacity: participants.length === 0 ? 0.4 : 1 }}>▶ Start session</button>
+              <button onClick={() => setStatus('active')} disabled={participants.length === 0} style={{ ...BTN, opacity: participants.length === 0 ? 0.4 : 1 }}>Start session</button>
             </div>
             {participants.length === 0
               ? <p style={{ fontSize: 13, color: C.text3 }}>Waiting for students to join with the link...</p>
@@ -5063,16 +5275,16 @@ function DinamicasView({ user }) {
               <img src={slide.image_url} alt="" style={{ width: '100%', maxHeight: 180, objectFit: 'cover', borderRadius: 10, marginBottom: '0.75rem', border: `1px solid ${C.border}` }} />
             )}
             {getYouTubeId(slide.video_url) && (
-              <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: '0.75rem', border: `1px solid ${C.border}` }}>
-                <iframe src={`https://www.youtube.com/embed/${getYouTubeId(slide.video_url)}`}
-                  style={{ width: '100%', height: 180, border: 'none', display: 'block' }}
-                  allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={{ borderRadius: 10, overflow: 'hidden', marginBottom: '0.5rem', border: `1px solid ${C.border}` }}>
+                  <iframe src={`https://www.youtube.com/embed/${getYouTubeId(slide.video_url)}`}
+                    style={{ width: '100%', height: 180, border: 'none', display: 'block' }}
+                    allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen />
+                </div>
               </div>
             )}
 
-            <p style={{ fontSize: slide.type === 'story' ? 15 : 16, fontWeight: slide.type === 'story' ? 400 : 700, color: C.text, marginBottom: '1rem', lineHeight: 1.5 }}>
-              {slide.question || '—'}
-            </p>
+            <div dangerouslySetInnerHTML={{ __html: slide.question || '—' }} style={{ fontSize: slide.type === 'story' ? 15 : 16, fontWeight: slide.type === 'story' ? 400 : 700, color: C.text, marginBottom: '1rem', lineHeight: 1.5 }} />
 
             {/* Vote bars — MC and story_choice */}
             {isVoteType && (
@@ -5082,6 +5294,9 @@ function DinamicasView({ user }) {
                   const pct   = participants.length > 0 ? Math.round((count / participants.length) * 100) : 0;
                   const isCor = slide.type === 'multiple_choice' && slide.correct_answer === oi;
                   const branchTarget = slide.branch_targets?.[oi];
+                  const voters = slideResponses
+                    .filter(r => r.answer === String(oi))
+                    .map(r => participants.find(p => p.id === r.participant_id)?.name || '?');
                   return (
                     <div key={oi} style={{ background: `${OPT_COLORS[oi]}18`, border: `1px solid ${isCor ? OPT_COLORS[oi] : 'transparent'}`, borderRadius: 10, padding: '10px 12px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -5091,9 +5306,16 @@ function DinamicasView({ user }) {
                       {slide.type === 'story_choice' && branchTarget != null && (
                         <p style={{ fontSize: 10, color: C.text3, marginBottom: 3 }}>→ Slide {branchTarget + 1}</p>
                       )}
-                      <div style={{ height: 4, background: 'rgba(240,236,224,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: 4, background: 'rgba(240,236,224,0.1)', borderRadius: 2, overflow: 'hidden', marginBottom: voters.length > 0 ? 6 : 0 }}>
                         <div style={{ height: '100%', width: `${pct}%`, background: OPT_COLORS[oi], borderRadius: 2, transition: 'width 0.4s' }} />
                       </div>
+                      {voters.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                          {voters.map((name, ni) => (
+                            <span key={ni} style={{ fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 50, background: `${OPT_COLORS[oi]}22`, color: OPT_COLORS[oi] }}>{name}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -5102,14 +5324,18 @@ function DinamicasView({ user }) {
 
             {/* Open question feed */}
             {slide.type === 'open_question' && (
-              <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {slideResponses.length === 0
                   ? <p style={{ fontSize: 13, color: C.text3 }}>Waiting for responses...</p>
-                  : slideResponses.map(r => (
-                      <div key={r.id} style={{ background: 'rgba(240,236,224,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
-                        <p style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{r.answer}</p>
-                      </div>
-                    ))
+                  : slideResponses.map(r => {
+                      const pName = participants.find(p => p.id === r.participant_id)?.name;
+                      return (
+                        <div key={r.id} style={{ background: 'rgba(240,236,224,0.04)', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
+                          {pName && <p style={{ fontSize: 10, fontWeight: 700, color: C.text3, marginBottom: 3 }}>{pName}</p>}
+                          <p style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{r.answer}</p>
+                        </div>
+                      );
+                    })
                 }
               </div>
             )}
@@ -5170,6 +5396,7 @@ const VIEW_TITLES = {
   coaches:            "Coaches",
   "my-hours":         "My Hours",
   students:           "Students",
+  progress:           "Progress",
   metricas:           "Metrics",
   invites:            "Invitations",
   perfil:             "Profile",
@@ -5188,25 +5415,23 @@ const CR_HOLIDAYS = new Set([
   "2026-08-31","2026-09-15","2026-12-01",
 ]);
 const CLASS_END  = new Date(2026, 11, 18); // Dec 18, 2026 inclusive
-const USD_RATE   = 450; // ₡ per $
 
-function stuCountDays(year, month, dayNums) {
+function stuCountDays(startDate, endDate, dayNums) {
   if (!dayNums?.length) return 0;
-  const last = new Date(year, month, 0).getDate();
   let n = 0;
-  for (let d = 1; d <= last; d++) {
-    const date = new Date(year, month - 1, d);
-    if (date > CLASS_END) break;
-    if (dayNums.includes(date.getDay())) {
-      const iso = `${year}-${String(month).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const cur = new Date(startDate);
+  while (cur <= endDate && cur <= CLASS_END) {
+    if (dayNums.includes(cur.getDay())) {
+      const iso = cur.toISOString().split("T")[0];
       if (!CR_HOLIDAYS.has(iso)) n++;
     }
+    cur.setDate(cur.getDate() + 1);
   }
   return n;
 }
 
-function stuCalc(s, year, month) {
-  const rate = parseFloat(s.price_per_hour) || 0;
+function stuCalc(s, year, month, rateOverride = null) {
+  const rate = rateOverride != null ? rateOverride : (parseFloat(s.price_per_hour) || 0);
   const disc = parseFloat(s.discount) || 0;
   const days = s.days ? s.days.split(",").map(Number).filter(Boolean) : [];
   const rateC = s.currency === "USD" ? rate * USD_RATE : rate;
@@ -5214,22 +5439,26 @@ function stuCalc(s, year, month) {
   const isNumericGroup = /^\d+$/.test(String(s.group_number || "").trim());
   if (s.billing_type === "monthly" || (isNumericGroup && s.billing_type !== "package")) {
     const net = rateC * (1 - disc / 100);
-    const iva = net * 0.02;
+    const iva = net * IVA_RATE;
     return { hrs: null, net, iva, total: Math.round(net + iva) };
   }
   if (s.billing_type === "package") {
     return { hrs: null, net: 0, iva: 0, total: 0 };
   }
-  const hrs = stuCountDays(year, month, days);
+  const payDay = parseInt(s.pay_day) || 30;
+  const start = new Date(year, month - 1, payDay);
+  const end   = new Date(year, month, payDay - 1);
+  const hrs = stuCountDays(start, end, days);
   const net = hrs * rateC * (1 - disc / 100);
-  const iva = net * 0.02;
+  const iva = net * IVA_RATE;
   return { hrs, net, iva, total: Math.round(net + iva) };
 }
 
-const STU_LEVELS    = ["A1","A2","B1","B2","C1","C2"];
+const STU_BILLING_START = { year: 2026, month: 6 }; // Junio 2026 — primer mes con datos de billing
+const STU_LEVELS    = ["Fn","A1","A2","B1","B2","C1","C2"];
 const STU_WEEKDAYS  = [{v:1,l:"Mon"},{v:2,l:"Tue"},{v:3,l:"Wed"},{v:4,l:"Thu"},{v:5,l:"Fri"}];
 const STU_SCHEDULES = ["Morning","Afternoon","Evening"];
-const STU_MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const STU_MONTH_NAMES = MONTHS_LONG;
 const STU_BLANK = {
   name:"", email:"", phone:"", group_number:"", level:"A2",
   billing_type:"weekly", days:[], schedule:"Morning", class_time:"09:00",
@@ -5240,10 +5469,11 @@ const STU_BLANK = {
 function StudentsView() {
   const [students,   setStudents]   = useState(null);
   const [billing,    setBilling]    = useState({});
+  const [showActive, setShowActive] = useState(true);
   const [payFilter,  setPayFilter]  = useState("all");
   const [mOffset,    setMOffset]    = useState(() => {
     const n = new Date();
-    return Math.max(0, (2026 - n.getFullYear()) * 12 + (5 - n.getMonth()));
+    return Math.max(0, (STU_BILLING_START.year - n.getFullYear()) * 12 + (STU_BILLING_START.month - 1 - n.getMonth()));
   });
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState(null);
@@ -5251,24 +5481,27 @@ function StudentsView() {
   const [form,       setForm]       = useState({ ...STU_BLANK, days: [] });
   const [formSaving, setFormSaving] = useState(false);
   const [delId,      setDelId]      = useState(null);
-  const [collapsed,  setCollapsed]  = useState(new Set());
-  const [toggling,   setToggling]   = useState({});
+  const [collapsed,       setCollapsed]       = useState(new Set());
+  const [toggling,        setToggling]        = useState({});
+  const [overrideEditing, setOverrideEditing] = useState(null); // studentId being edited
+  const [overrideInput,   setOverrideInput]   = useState("");
+  const [overrideSaving,  setOverrideSaving]  = useState({});
 
   const now   = new Date();
   const base  = new Date(now.getFullYear(), now.getMonth() + mOffset, 1);
   const year  = base.getFullYear();
   const month = base.getMonth() + 1;
   const ym    = `${year}-${String(month).padStart(2,"0")}`;
-  const atMin = year * 12 + month <= 2026 * 12 + 6;
+  const atMin = year * 12 + month <= STU_BILLING_START.year * 12 + STU_BILLING_START.month;
 
-  useEffect(() => { loadStudents(); }, []);
+  useEffect(() => { loadStudents(showActive); }, [showActive]);
   useEffect(() => { if (students) loadBilling(); }, [ym, students]);
 
-  const loadStudents = async () => {
+  const loadStudents = async (activeOnly = true) => {
     setLoading(true); setError(null);
     const { data, error: e } = await supabase
       .from("students").select("*")
-      .eq("active", true)
+      .eq("active", activeOnly)
       .order("group_number").order("created_at");
     if (e) setError(e.message); else setStudents(data || []);
     setLoading(false);
@@ -5283,6 +5516,18 @@ function StudentsView() {
     const map = {};
     (data || []).forEach(b => { map[b.student_id] = b; });
     setBilling(map);
+  };
+
+  const saveOverride = async (studentId, raw) => {
+    const val = raw === "" ? null : parseFloat(raw);
+    setOverrideSaving(p => ({ ...p, [studentId]: true }));
+    setBilling(p => ({ ...p, [studentId]: { ...(p[studentId] || {}), amount_override: val } }));
+    await supabase.from("student_billing").upsert(
+      { student_id: studentId, year_month: ym, amount_override: val },
+      { onConflict: "student_id,year_month" }
+    );
+    setOverrideSaving(p => ({ ...p, [studentId]: false }));
+    setOverrideEditing(null);
   };
 
   const togglePaid = async (studentId) => {
@@ -5302,27 +5547,37 @@ function StudentsView() {
     if (!form.name.trim()) return;
     setFormSaving(true);
     const days = Array.isArray(form.days) ? form.days.join(",") : (form.days || "");
+    const rawGroup = form.group_number?.trim() || "";
     const payload = {
-      name: form.name.trim(), email: form.email.trim(), group_number: form.group_number.trim(),
+      name: form.name.trim(), email: form.email?.trim() || null, group_number: rawGroup,
       level: form.level, billing_type: form.billing_type, days,
       schedule: form.schedule, class_time: form.class_time, company: form.company,
       package_hours: form.billing_type === "package" ? (parseInt(form.package_hours) || 0) : null,
       package_remaining: form.billing_type === "package" ? (parseInt(form.package_remaining) ?? parseInt(form.package_hours) ?? null) : null,
       price_per_hour: parseFloat(form.price_per_hour) || 0,
       currency: form.currency, discount: parseFloat(form.discount) || 0,
-      pay_day: parseInt(form.pay_day) || 30, comments: form.comments, phone: form.phone?.trim() || null, active: true,
+      pay_day: parseInt(form.pay_day) || 30, comments: form.comments, phone: form.phone?.trim() || null,
+      active: modal.mode === "edit" ? Boolean(form.active) : true,
     };
+    let err;
     if (modal.mode === "edit") {
-      await supabase.from("students").update(payload).eq("id", modal.data.id);
+      ({ error: err } = await supabase.from("students").update(payload).eq("id", modal.data.id));
     } else {
-      await supabase.from("students").insert(payload);
+      ({ error: err } = await supabase.from("students").insert(payload));
     }
-    setFormSaving(false); setModal(null); loadStudents();
+    setFormSaving(false);
+    if (err) { toast("Error saving student: " + err.message); return; }
+    setModal(null); loadStudents();
   };
 
   const deleteStudent = async (id) => {
     await supabase.from("students").update({ active: false }).eq("id", id);
-    setDelId(null); loadStudents();
+    setDelId(null); loadStudents(showActive);
+  };
+
+  const reactivateStudent = async (id) => {
+    await supabase.from("students").update({ active: true }).eq("id", id);
+    loadStudents(showActive);
   };
 
   const groups = React.useMemo(() => {
@@ -5338,14 +5593,14 @@ function StudentsView() {
       if (a === "Private" && b !== "Private") return 1;
       if (b === "Private" && a !== "Private") return -1;
       return a.localeCompare(b, undefined, { numeric: true });
-    });
+    }).map(([g, arr]) => [g, arr.slice().sort((a,b) => a.name.localeCompare(b.name))]);
   }, [students, payFilter]);
 
   const summary = React.useMemo(() => {
     if (!students) return { count: 0, d15:{rev:0,col:0,pen:0}, d30:{rev:0,col:0,pen:0} };
     let d15 = { rev:0, col:0 }, d30 = { rev:0, col:0 };
     students.forEach(s => {
-      const { total } = stuCalc(s, year, month);
+      const { total } = stuCalc(s, year, month, billing[s.id]?.amount_override ?? null);
       const bucket = parseInt(s.pay_day) === 15 ? d15 : d30;
       bucket.rev += total;
       if (billing[s.id]?.paid) bucket.col += total;
@@ -5379,6 +5634,7 @@ function StudentsView() {
   const openEdit = s => {
     setForm({
       ...s,
+      active: s.active !== false,
       days: s.days ? s.days.split(",").map(Number).filter(Boolean) : [],
       discount: String(s.discount ?? 0),
       pay_day: String(s.pay_day ?? 30),
@@ -5452,6 +5708,16 @@ function StudentsView() {
             style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>›</button>
         </div>
         <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+          {[[true,"Active"],[false,"Inactive"]].map(([v,l]) => (
+            <button key={l} onClick={() => setShowActive(v)}
+              style={{ ...SEL(), padding:"0.4rem 0.65rem", fontSize:12,
+                color: showActive===v ? C.text : C.text3,
+                border: `1px solid ${showActive===v ? C.accent : C.border}`,
+                fontWeight: showActive===v ? 700 : 400 }}>{l}</button>
+          ))}
+        </div>
+        <div style={{ width:1, height:20, background:C.border, flexShrink:0 }} />
+        <div style={{ display:"flex", gap:4, flexShrink:0 }}>
           {[["all","All"],["15","Day 15"],["30","Day 30"]].map(([v,l]) => (
             <button key={v} onClick={() => setPayFilter(v)}
               style={{ ...SEL(), padding:"0.4rem 0.65rem", fontSize:12,
@@ -5460,10 +5726,12 @@ function StudentsView() {
                 fontWeight: payFilter===v ? 700 : 400 }}>{l}</button>
           ))}
         </div>
-        <button onClick={openAdd} style={{ ...SEL(), padding:"0.4rem 1rem", color:C.text,
-          border:`1px solid ${C.border2}`, flexShrink:0 }}>
-          + Add student
-        </button>
+        {showActive && (
+          <button onClick={openAdd} style={{ ...SEL(), padding:"0.4rem 1rem", color:C.text,
+            border:`1px solid ${C.border2}`, flexShrink:0 }}>
+            + Add student
+          </button>
+        )}
       </div>
 
       {/* Summary cards */}
@@ -5497,8 +5765,9 @@ function StudentsView() {
       {/* Groups */}
       {groups.map(([groupNum, gStudents]) => {
         const isCol = collapsed.has(groupNum);
-        const gTotal = gStudents.reduce((s, st) => s + stuCalc(st, year, month).total, 0);
-        const gPaid  = gStudents.reduce((s, st) => s + (billing[st.id]?.paid ? stuCalc(st, year, month).total : 0), 0);
+        const effTotal = st => stuCalc(st, year, month, billing[st.id]?.amount_override ?? null).total;
+        const gTotal = gStudents.reduce((s, st) => s + effTotal(st), 0);
+        const gPaid  = gStudents.reduce((s, st) => s + (billing[st.id]?.paid ? effTotal(st) : 0), 0);
         return (
           <div key={groupNum} style={{ marginBottom:"1.25rem" }}>
             {/* Group header */}
@@ -5538,7 +5807,8 @@ function StudentsView() {
                   </thead>
                   <tbody>
                     {gStudents.map((s, i) => {
-                      const { hrs, total } = stuCalc(s, year, month);
+                      const rateOv = billing[s.id]?.amount_override ?? null;
+                      const { hrs, total } = stuCalc(s, year, month, rateOv);
                       const isPaid = billing[s.id]?.paid || false;
                       const rateLabel = s.currency === "USD"
                         ? `$${parseFloat(s.price_per_hour||0).toLocaleString("en-US")}`
@@ -5571,7 +5841,39 @@ function StudentsView() {
                               <p style={{ fontSize:13, fontWeight:700, color: hrs > 0 ? C.text : C.text3 }}>{hrs || "—"}</p>
                             )}
                           </td>
-                          <td style={{ padding:"0.7rem 1rem", fontSize:12, fontWeight:600, color:C.text2, whiteSpace:"nowrap" }}>{rateLabel}</td>
+                          <td style={{ padding:"0.7rem 1rem", whiteSpace:"nowrap" }}>
+                            {s.billing_type === "package" ? (
+                              <span style={{ fontSize:12, fontWeight:600, color:C.text2 }}>{rateLabel}</span>
+                            ) : overrideEditing === s.id ? (
+                              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                                <input autoFocus type="number" min="0" value={overrideInput}
+                                  onChange={e => setOverrideInput(e.target.value)}
+                                  onKeyDown={e => { if (e.key==="Enter") saveOverride(s.id, overrideInput); if (e.key==="Escape") setOverrideEditing(null); }}
+                                  style={{ width:76, background:C.surface2, border:`1px solid ${C.amber}`, borderRadius:6,
+                                    padding:"0.2rem 0.4rem", color:C.text, fontSize:12, fontFamily:"inherit", outline:"none" }} />
+                                <button onClick={() => saveOverride(s.id, overrideInput)}
+                                  style={{ background:"none", border:`1px solid ${C.green}55`, borderRadius:6,
+                                    padding:"0.15rem 0.4rem", color:C.green, fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>
+                                  {overrideSaving[s.id] ? "…" : "OK"}
+                                </button>
+                                <button onClick={() => setOverrideEditing(null)}
+                                  style={{ background:"none", border:"none", color:C.text3, fontSize:13, cursor:"pointer", padding:"0 2px" }}>✕</button>
+                              </div>
+                            ) : (
+                              <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+                                <span style={{ fontSize:12, fontWeight:600, color: rateOv != null ? C.amber : C.text2 }}>
+                                  {rateOv != null ? fmtC(rateOv) : rateLabel}
+                                </span>
+                                <button onClick={() => { setOverrideEditing(s.id); setOverrideInput(rateOv != null ? String(rateOv) : String(parseFloat(s.price_per_hour||0))); }}
+                                  style={{ background:"none", border:`1px solid ${C.amber}66`, borderRadius:4,
+                                    color:C.amber, fontSize:10, cursor:"pointer", padding:"1px 4px", lineHeight:1.4 }}>✏</button>
+                                {rateOv != null && (
+                                  <button onClick={() => saveOverride(s.id, "")}
+                                    style={{ background:"none", border:"none", color:"#d95f5f", fontSize:11, cursor:"pointer", padding:"0 2px" }}>↺</button>
+                                )}
+                              </div>
+                            )}
+                          </td>
                           <td style={{ padding:"0.7rem 1rem", fontSize:12, color: parseFloat(s.discount)>0 ? C.amber : C.text3, whiteSpace:"nowrap" }}>
                             {parseFloat(s.discount)>0 ? `-${s.discount}%` : "—"}
                           </td>
@@ -5607,14 +5909,20 @@ function StudentsView() {
                             {s.comments || ""}
                           </td>
                           <td style={{ padding:"0.7rem 1rem" }}>
-                            <div style={{ display:"flex", gap:4 }}>
-                              <button onClick={() => openEdit(s)}
-                                style={{ ...SEL(), padding:"0.2rem 0.45rem", fontSize:11,
-                                  color:C.amber, border:`1px solid ${C.amber}44` }}>✏</button>
-                              <button onClick={() => setDelId(s.id)}
-                                style={{ ...SEL(), padding:"0.2rem 0.45rem", fontSize:11,
-                                  color:"#d95f5f", border:`1px solid #d95f5f44` }}>✕</button>
-                            </div>
+                            {showActive ? (
+                              <div style={{ display:"flex", gap:4 }}>
+                                <button onClick={() => openEdit(s)}
+                                  style={{ ...SEL(), padding:"0.2rem 0.45rem", fontSize:11,
+                                    color:C.amber, border:`1px solid ${C.amber}44` }}>✏</button>
+                                <button onClick={() => setDelId(s.id)}
+                                  style={{ ...SEL(), padding:"0.2rem 0.45rem", fontSize:11,
+                                    color:"#d95f5f", border:`1px solid #d95f5f44` }}>✕</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => reactivateStudent(s.id)}
+                                style={{ ...SEL(), padding:"0.2rem 0.55rem", fontSize:10,
+                                  color:C.green, border:`1px solid ${C.green}44`, whiteSpace:"nowrap" }}>↩ Reactivar</button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -5825,6 +6133,30 @@ function StudentsView() {
                 style={{ ...inputSty, resize:"vertical", lineHeight:1.5 }} />
             </div>
 
+            {/* Active status — edit only */}
+            {modal.mode === "edit" && (
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                padding:"0.7rem 0.9rem", borderRadius:10, background:C.surface2,
+                border:`1px solid ${C.border}`, marginBottom:"1.25rem" }}>
+                <div>
+                  <p style={{ fontSize:12, fontWeight:700, color:C.text, lineHeight:1.2 }}>Estado del estudiante</p>
+                  <p style={{ fontSize:11, color:C.text3, marginTop:2 }}>{form.active ? "Activo" : "Inactivo"}</p>
+                </div>
+                <div onClick={() => setF("active", !form.active)}
+                  style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
+                  <div style={{ width:40, height:22, borderRadius:11,
+                    background: form.active ? C.green : C.surface2,
+                    border:`1px solid ${form.active ? C.green : C.border2}`,
+                    position:"relative", transition:"background 0.18s" }}>
+                    <div style={{ position:"absolute", top:3,
+                      left: form.active ? 19 : 3, width:14, height:14,
+                      borderRadius:"50%", transition:"left 0.18s",
+                      background: form.active ? "#fff" : C.text3 }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
             <div style={{ display:"flex", gap:"0.75rem" }}>
               <button onClick={() => setModal(null)}
@@ -5850,6 +6182,8 @@ function MyHoursView({ user }) {
   const [coachName,   setCoachName]   = useState("");
   const [monthOffset, setMonthOffset] = useState(0);
   const [events,      setEvents]      = useState(null);
+  const [liveRate,    setLiveRate]    = useState(null);
+  const [liveIva,     setLiveIva]     = useState(null);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState(null);
 
@@ -5858,6 +6192,15 @@ function MyHoursView({ user }) {
       .then(({ data }) => { if (data?.nombre) setCoachName(data.nombre.split(" ")[0]); });
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!coachName) return;
+    supabase.from("coach_rates").select("rate, iva").eq("coach_name", coachName).single()
+      .then(({ data }) => {
+        if (data?.rate != null) setLiveRate(parseFloat(data.rate));
+        if (data?.iva != null)  setLiveIva(data.iva);
+      });
+  }, [coachName]);
+
   const getMonthBounds = (off) => {
     const n = new Date();
     const d = new Date(n.getFullYear(), n.getMonth() + off, 1);
@@ -5865,8 +6208,7 @@ function MyHoursView({ user }) {
              year: d.getFullYear(), month: d.getMonth() };
   };
   const { start, end, year, month } = getMonthBounds(monthOffset);
-  const MO_NAMES = ["January","February","March","April","May","June",
-                    "July","August","September","October","November","December"];
+  const MO_NAMES = MONTHS_LONG;
 
   useEffect(() => {
     if (!coachName) return;
@@ -5877,7 +6219,7 @@ function MyHoursView({ user }) {
       body: JSON.stringify({ source:"teams", startDateTime: start.toISOString(), endDateTime: end.toISOString() })
     }).then(r=>r.json()).then(d => {
       if (!Array.isArray(d)) throw new Error();
-      setEvents(d.map(ev=>({ ...ev, date: new Date(new Date(ev.start).getTime()-6*60*60*1000) }))
+      setEvents(d.map(ev=>({ ...ev, date: toCRDate(ev.start) }))
         .filter(ev => !isNaN(ev.date.getTime()) && ev.coach?.trim() === coachName));
     }).catch(()=>setError("No se pudo cargar el calendario."))
     .finally(()=>setLoading(false));
@@ -5899,16 +6241,16 @@ function MyHoursView({ user }) {
     });
   }, [events]);
 
-  const rateInfo  = COACH_RATES[coachName];
-  const rateInCRC = rateInfo ? (rateInfo.currency==="$" ? rateInfo.rate*450 : rateInfo.rate) : null;
+  const rateInCRC = liveRate;
+  const hasIva    = liveIva ?? true;
   const calc = (n) => {
     if (!rateInCRC) return { net:0, iva:0, total:0 };
-    const net = n * rateInCRC, iva = rateInfo.iva ? net*0.02 : 0;
+    const net = n * rateInCRC, iva = hasIva ? net*IVA_RATE : 0;
     return { net, iva, total: net+iva };
   };
   const fmtC = n => `₡${Math.round(n).toLocaleString("es-CR")}`;
   const fmtWk = (mon,sat) => {
-    const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const mo = MONTHS_SHORT;
     return mon.getMonth()===sat.getMonth()
       ? `${mon.getDate()}–${sat.getDate()} ${mo[mon.getMonth()]}`
       : `${mon.getDate()} ${mo[mon.getMonth()]}–${sat.getDate()} ${mo[sat.getMonth()]}`;
@@ -5916,6 +6258,13 @@ function MyHoursView({ user }) {
 
   const totalClasses = weeks.reduce((s,w)=>s+w.count, 0);
   const { net:tNet, iva:tIva, total:tTotal } = calc(totalClasses);
+
+  // Quincenas: pagos son quincenales — Q1 = día 1–15, Q2 = 16–fin de mes
+  const q1Count = (events || []).filter(ev => ev.date.getDate() <= 15).length;
+  const q2Count = (events || []).length - q1Count;
+  const q1Total = calc(q1Count).total;
+  const q2Total = calc(q2Count).total;
+  const lastDay = new Date(year, month + 1, 0).getDate();
   const thSty = (align="right") => ({
     padding:"0.6rem 1rem", fontSize:10, fontWeight:800, color:C.text3,
     letterSpacing:"0.07em", textTransform:"uppercase",
@@ -5953,6 +6302,24 @@ function MyHoursView({ user }) {
         </div>
       )}
       {error && <p style={{ color:"#d95f5f", fontSize:13, marginBottom:"1rem" }}>{error}</p>}
+
+      {/* Desglose quincenal — pagos son quincenales */}
+      {!loading && events && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:"0.75rem", marginBottom:"1rem", maxWidth:600 }}>
+          {[
+            { label:`${MONTHS_SHORT[month]} 1–15`,  sub:"First payment",  count:q1Count, amount:q1Total },
+            { label:`${MONTHS_SHORT[month]} 16–${lastDay}`, sub:"Second payment", count:q2Count, amount:q2Total },
+            { label:"Month total", sub:`${MO_NAMES[month]} ${year}`, count:totalClasses, amount:tTotal, accent:true },
+          ].map((c,i) => (
+            <div key={i} style={{ ...CARD, borderRadius:14, padding:"1rem 1.1rem",
+              border: c.accent ? "1px solid rgba(37,211,102,0.3)" : undefined }}>
+              <p style={{ fontSize:10, fontWeight:800, letterSpacing:"0.1em", textTransform:"uppercase", color:C.text3, marginBottom:6 }}>{c.label}</p>
+              <p style={{ fontSize:"clamp(1.1rem,4vw,1.4rem)", fontWeight:900, letterSpacing:"-0.02em", color: c.accent ? C.green : C.text, lineHeight:1.1 }}>{fmtC(c.amount)}</p>
+              <p style={{ fontSize:11, color:C.text3, marginTop:4 }}>{c.count} hr{c.count!==1?"s":""}{c.sub ? ` · ${c.sub}` : ""}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {!loading && events && (
         <div style={{ ...CARD, borderRadius:14, overflowX:"auto", WebkitOverflowScrolling:"touch", maxWidth:600 }}>
@@ -5999,9 +6366,478 @@ function MyHoursView({ user }) {
 }
 
 // ── CLASS HISTORY VIEW ─────────────────────────────────────────
+// ── STUDENT PROGRESS VIEW ──────────────────────────────────────
+// Syllabus v6.0 — capítulos por nivel (número + título corto)
+const SYLLABUS = {
+  Fn: { label: "Foundation", chapters: [
+    [0,"Survival Kit"],[1,"TO BE — Present"],[2,"TO BE — Past"],[3,"TO BE — Future"],
+    [4,"There Is/Are + Articles"],[5,"There Was/Were"],[6,"There Will Be"],
+    [7,"Present Continuous"],[8,"Integration — SVO Storyteller"]] },
+  A1: { label: "A1", chapters: [
+    [1,"Present Simple"],[2,"Simple vs Continuous"],[3,"Likes & Frequency"],
+    [4,"Family, Descriptions & do/make"],[5,"Places, Directions & Imperatives"],
+    [6,"Plans, Abilities & Requests"],[7,"Integration + Small Talk Ritual"]] },
+  A2: { label: "A2", chapters: [
+    [1,"Past Simple"],[2,"Past Continuous"],[3,"Used To"],[4,"All Future Forms"],
+    [5,"Object Pronouns & Suggestions"],[6,"Modals + Tag Questions"],[7,"Comparisons"],
+    [8,"Sequencing & Reflexives"],[9,"Compound Pronouns"],[10,"Duration & -ed/-ing"]] },
+  B1: { label: "B1", chapters: [
+    [1,"Present Perfect"],[2,"Perfect vs Past"],[3,"Present Perfect Continuous"],
+    [4,"Past Perfect"],[5,"Future Perfect & Continuous"],[6,"First Conditional"],
+    [7,"Second Conditional"],[8,"Passive Voice"],[9,"Reported Speech"],
+    [10,"Gerunds & Infinitives"],[11,"Integration + Pro Update"]] },
+  B2: { label: "B2", chapters: [
+    [1,"Third Conditional"],[2,"Mixed Conditionals"],[3,"Passive & Causative"],
+    [4,"Relative Clauses"],[5,"Inversion & Emphasis"],[6,"Discourse & Hedging"],
+    [7,"Ellipsis & Substitution"],[8,"Participle Clauses"],[9,"Modals of Deduction"],
+    [10,"Wish & Regret"],[11,"Integration + Pro Meeting"]] },
+  C1: { label: "C1", chapters: [
+    [1,"Idioms in the Wild"],[2,"Advanced Phrasal Verbs"],[3,"Register Shifts"],
+    [4,"Humor, Sarcasm & Irony"],[5,"Storytelling Techniques"],[6,"Negotiation & Persuasion"],
+    [7,"Emotional Intelligence"],[8,"Critical Thinking"],[9,"Cultural References"],
+    [10,"Integration — Networking Event"]] },
+  C2: { label: "C2", chapters: [
+    [1,"Nuanced Communication"],[2,"Persuasive Language"],[3,"Sophisticated Vocabulary"],
+    [4,"Complex Argumentation"],[5,"Metaphorical Language"],[6,"Academic Discourse"],
+    [7,"Executive Communication"],[8,"Literary & Rhetorical Devices"],
+    [9,"Cross-Cultural Competence"],[10,"Mastery — Executive Gauntlet"]] },
+};
+
+// Chapter content (extracted from syllabi v6.0)
+const CHAPTER_INFO = {
+  // ── FOUNDATION ──
+  "Fn-0": { canDo:"Run my whole class in English — asking for repetition, meaning, spelling, and examples — without switching to Spanish.", grammar:"None. Fixed chunks used as whole blocks (students don't analyze the grammar inside them yet).", traps:"'What means X?' → What does X mean? · 'Repeat me' → Can you repeat that?", chunks:"Sorry, can you repeat that? · What does __ mean? · How do you say __? · How do you spell that? · Can you give me an example? · Let me think... · I'm not sure, but... · I didn't catch that.", pv:"sit down · stand up · come in · hold on · hang on", pron:"'Can you' → /kənjə/ · rising intonation on yes/no · first schwa /ə/", technique:"Repair Ladder: didn't hear→repeat · didn't understand→what does X mean · stuck→let me think · missing word→how do you say", exitTask:"Breakdown Drill (3 min): coach engineers 5 consecutive breakdowns; student must survive them all in English." },
+  "Fn-1": { canDo:"Introduce myself (name, nationality, profession, current state) using contractions and sustain a 2-min exchange.", grammar:"S + TO BE + O. Default contractions: I'm, You're, He's, She's, It's, We're, They're. Connector 'and'.", traps:"'I have 30 years' → I'm 30 · 'Is hot today' → It's hot · 'I have hunger' → I'm hungry · ser/estar → only one 'be'", chunks:"Nice to meet you! · How's it going? · Pretty good, thanks. And you? · Not bad! · What about you? · What do you do? · Take care! · Long time no see!", pv:"come from · sit down/stand up · calm down · cheer up · wake up", pron:"/iː/ vs /ɪ/ (he's/his, eat/it, leave/live) · contractions as single syllables", technique:"Repair + Minimal Responses (uh-huh, OK, really?, wow, I see)", exitTask:"Two-Minute Meet & Greet: coworker roleplay with contractions + ≥2 questions + minimal responses." },
+  "Fn-2": { canDo:"Contrast how I was before with how I am now (was/were + but) in 5+ connected sentences.", grammar:"was/were, wasn't/weren't. Connector 'but'. Markers: last, ago, yesterday, last week/month.", traps:"'I was 5 persons' → There were 5 people · 'When I was child' → When I was a child · 'I had 10 years' → I was 10", chunks:"Back then... · At the time... · To be honest, I was... · I wasn't really... · You know what I mean? · That was a while ago.", pv:"grow up · move out · move in · get back · look back", pron:"weak /wəz/ /wɚ/ · anti-epenthesis on 'wasn't'", technique:"Repair + Time-buying (Let me think / How do you say)", exitTask:"Then vs Now (2 min): 5+ was...but...am contrasts with correct was/were." },
+  "Fn-3": { canDo:"State a future plan or state justified with because, connecting all 3 timelines about myself.", grammar:"will be / won't be. Connector 'because'. Contractions: I'll, you'll, she'll, won't.", traps:"'I will to be' → I will be · 'won't' /woʊnt/ ≠ 'want' /wɑːnt/", chunks:"I'll probably... · Hopefully... · Fingers crossed! · We'll see. · I can't wait! · It depends. · Sounds good!", pv:"look forward to · show up · come over · drop by · hang out", pron:"will-contractions /əl/ /l/ · won't vs want minimal pair", technique:"Repair + first AAA preview (answer, add, ask back)", exitTask:"Three Timelines (2 min): one topic across past→present→future with but and because." },
+  "Fn-4": { canDo:"Give a live tour of my home or office with there is/are + quantifiers + correct articles.", grammar:"There + is/are. some (aff) → any (neg/Q). Articles: a/an, the, Ø. Connector 'so'.", traps:"'Have many people' → There are many people · 'The life is hard' → Life is hard · 'informations/advices/furnitures' → uncountables, no plural", chunks:"There's not much... · There's plenty of... · A couple of... · None at all. · Kind of messy. · It's pretty small. · Take a look.", pv:"look around · pick up · put away · clean up · throw out", pron:"'There is' → /ðeərɪz/, 'There are' → /ðeərɑːr/ · th /ð/", technique:"Repair + Minimal Responses while listening to the partner", exitTask:"Home Tour (2-3 min): 3 rooms with quantifiers + articles + ≥1 'there isn't any'." },
+  "Fn-5": { canDo:"Describe how my neighborhood or hometown has changed (there was... but now there is...) for 2 min.", grammar:"there was/were + present contrast with 'but'.", traps:"'Had a park before' → There was a park · 'In that time' → At that time / Back then", chunks:"Back in the day... · It used to be... · Things have changed. · Not anymore. · I remember when...", pv:"tear down · build up · turn into · do up · spring up", pron:"'There was' /ðeərwəz/ · contrast intonation", technique:"Storytelling preview: sequence two states in time", exitTask:"My City Then & Now (2 min): 4+ change statements pairing past/present." },
+  "Fn-6": { canDo:"Describe an upcoming event, predicting what there will and won't be.", grammar:"there will be / there won't be.", traps:"'Will have a party' → There will be a party · 'It will to have' → There will be", chunks:"It's gonna be great. · Save the date. · Count me in! · I'll be there. · Who's coming? · Bring whatever.", pv:"set up · call off · put on · turn out · kick off", pron:"'There will' → /ðeərəl/", technique:"AAA in event-planning: answer + add detail + ask about logistics", exitTask:"Event Pitch (2 min): real upcoming event with will/won't be + quantities + ≥1 prediction with because." },
+  "Fn-7": { canDo:"Narrate in real time what I and the people around me are doing right now, on camera, unprepared.", grammar:"am/is/are + verb-ing. Connectors because/so. Markers: now, right now, at the moment.", traps:"'I reading' (drop aux) → I'm reading · 'I am agree' → I agree (state verbs) · 'What you are doing?' → What are you doing?", chunks:"Right now I'm... · Hang on, I'm just... · I'm in the middle of... · What are you up to? · Nothing much. · Just chilling.", pv:"work on · deal with · get ready · warm up · wind down", pron:"-ing /ɪŋ/ (not /in/) · no 'e-' before s- (studying, not 'estudying')", technique:"Repair + live narration with coach backchannel", exitTask:"Live Cam (2 min): narrate own surroundings + guess what others are doing; auxiliary never dropped." },
+  "Fn-8": { canDo:"Tell a 4-min co-created story mixing identity, places, and actions across past/present/future without mental translation.", grammar:"REVIEW: TO BE (3 tenses) + THERE BE (3 tenses) + Present Continuous + connectors + articles + dummy subjects.", traps:"Cumulative: subject never dropped · tener-family killed · haber→there be · Ø-article · question inversion · no 'e-' epenthesis", chunks:"So anyway... · Long story short... · The thing is... · And that's when... · To be honest... · Anyway...", pv:"review of all 35 Foundation PVs in story context", pron:"storytelling rhythm · consolidate /iː/-/ɪ/ and schwa", technique:"Full Repair toolkit + Minimal Responses + AAA — all live", exitTask:"Co-Created Story (4 min): coach plants character + place; student crosses 3 timelines, ≥3 natural repairs, no translation pauses." },
+  // ── A1 ──
+  "A1-1": { canDo:"Describe my full daily routine and interview a partner about theirs using do/does with correct 3rd-person -s.", grammar:"Base verb (+s/es 3rd person); do/does for neg&Q. Irregulars: have→has, go→goes, do→does. Markers: every day, on weekdays, at night.", traps:"'She work' → She works · 'I no like' → I don't like · 'Do you can?' → one auxiliary · 'every days' → every day", chunks:"I usually... · First thing in the morning... · On a typical day... · It depends on the day. · I'm not a morning person. · More or less.", pv:"get up · wake up · go out · come back · stay in", pron:"3rd-person -s: works /s/, plays /z/, watches /ɪz/ · 'does' weak /dəz/", technique:"Answer-Add-Ask (AAA) — every answer = 3 parts", exitTask:"Routine Interview (3 min): student interviews coach and vice versa; correct -s, do/does, AAA ≥3×." },
+  "A1-2": { canDo:"Explain what I normally do vs what I'm doing differently right now or this week.", grammar:"simple (always/usually/often) vs continuous (now/today/this week). State verbs → simple.", traps:"'I am working since 2020' → I have worked · 'Always I do' → I always do · 'I'm wanting/knowing' → want/know are state verbs", chunks:"Normally, but today... · For a change... · These days... · Just for now. · As a rule... · Bear with me.", pv:"work out · hang out · chill out · calm down · focus on", pron:"contrast stress 'I WORK' vs 'I'm WORKing' · frequency adverbs unstressed", technique:"AAA + Wh-chains — turn partner's answer into 2 follow-up questions", exitTask:"Exception to the Rule (2 min): normal habit + today's exception with correct tense choice." },
+  "A1-3": { canDo:"Discuss my hobbies + their frequency and recommend an activity based on someone's preferences.", grammar:"like/love/hate + gerund. Frequency (once/twice a week). 'How often...?'", traps:"'I like read' → I like reading · 'I like very much pizza' → I really like pizza · 'me likes' → I like", chunks:"I'm really into... · I'm not a fan of... · It's not my thing. · I could go for... · Count me in. · I'll pass.", pv:"get into · take up · give up · cut down on · get bored of", pron:"like /laɪk/ + gerund linking · b vs v (very ≠ berry)", technique:"AAA + recommending", exitTask:"Hobby Match (3 min): discover coach's tastes + recommend with reason; like+gerund + ≥1 How often." },
+  "A1-4": { canDo:"Describe 3 family members (appearance + personality) and explain who I take after.", grammar:"possessives (my/your/his/her/our/their); Saxon genitive (John's car); adjective order. NEW: do vs make.", traps:"'The car of my brother' → my brother's car · 'his/her' confusion · 'make a question' → ask a question · 'make homework' → do homework", chunks:"He takes after... · She's the spitting image of... · We get along great. · We're really close. · They mean the world to me.", pv:"take after · grow up · look after · bring up · settle down", pron:"possessive 's: /ɪz/ /z/ /s/ · th /θ/ in brother/mother/father", technique:"AAA + vivid descriptive detail per person", exitTask:"Family Portrait (3 min): 3 relatives + who you take after + ≥1 do/make collocation." },
+  "A1-5": { canDo:"Describe my neighborhood and give working directions someone can actually follow.", grammar:"there is/are review; prepositions of place; relative pronouns (who/which/that). NEW: Imperatives (Turn left, Don't forget).", traps:"'In front of' ≠ 'across from' · overusing 'that' with people → who · 'You turn left' (not command) → Turn left", chunks:"It's right around the corner. · You can't miss it. · It's within walking distance. · Head straight for... · Hang a left. · Just past the bank.", pv:"turn left/right · go straight · head for · look for · find out", pron:"'next to' → /nekstə/ · anti-epenthesis on street/straight", technique:"Clarity check + Repair — summarize-to-confirm preview", exitTask:"Give Me Directions (2-3 min): direct coach from A to B; correct imperatives, listener reaches destination." },
+  "A1-6": { canDo:"Talk about abilities, plans, and desires + make polite requests in a service roleplay.", grammar:"catenatives (want/need/hope/plan + to); can (ability/permission); would like; purpose (for + noun / to + verb).", traps:"'I can to swim' → I can swim · 'I want a coffee' → I'd like a coffee · 'for improve' → to improve", chunks:"Could I get...? · Do you mind if...? · Would it be possible to...? · I was wondering if... · No rush. · That works for me.", pv:"aim for · hope for · long for · push for · set out to", pron:"'want to' → /wɑnə/, 'going to' → /ɡʌnə/ · modal weak forms", technique:"Politeness register + AAA — first register-shift (casual vs polite)", exitTask:"Service Roleplay (3 min): ≥3 polite requests + purpose with to+verb; no 'can to'." },
+  "A1-7": { canDo:"Sustain a spontaneous 3-min catch-up conversation using AAA at least 3 times.", grammar:"REVIEW: present simple/continuous, contrast, possessives, catenatives, modals, relatives, imperatives. NEW: Small Talk ritual (weather/weekend/work/plans — first 90 sec).", traps:"Cumulative: 3rd-person -s · do/does · adverb placement · can to · me likes · Saxon genitive", chunks:"How was your weekend? · Anything exciting? · How's work? · Crazy weather, huh? · Same old, same old. · Can't complain. · We should catch up soon.", pv:"catch up · fill in · bring up · point out · sum up", pron:"natural rhythm · 'um/uh' (not 'este/o sea') · consolidate -s and th", technique:"Full AAA + Small Talk Ritual — open every class with 90-sec small talk", exitTask:"The Catch-Up (3 min): unscripted small talk → topic → soft close; AAA ≥3×, no Spanish fillers." },
+  // ── A2 ──
+  "A2-1": { canDo:"Narrate a complete past experience (trip, anecdote) with accurate -ed and answer Wh- follow-ups.", grammar:"regular (+ed) & irregulars; did for neg/Q (base verb after did). Markers: yesterday, last week, ago.", traps:"'I didn't went' → didn't go · 'Yesterday I have eaten' → Yesterday I ate", chunks:"Back in the day · Once upon a time · That takes me back · I'll never forget · Long story short · I remember it like yesterday.", pv:"look back · think back · go back · date back · bring back", pron:"-ed: worked /t/, played /d/, wanted /ɪd/ · irregular vowel shifts (go/went)", technique:"Hook + Buying-Time Fillers (well.../let me see...)", exitTask:"Travel Story (3 min): real trip + 3 Wh- follow-ups; correct -ed, hook used." },
+  "A2-2": { canDo:"Tell a dramatic story combining background + interruption with H-C-E-P structure.", grammar:"was/were + -ing; when + past simple (interruption); while + past continuous (background).", traps:"'I was read' → I was reading · 'When I was arriving' → When I arrived", chunks:"Out of the blue · All of a sudden · Before I knew it · In the blink of an eye · That's when it happened. · You should've seen my face.", pv:"break out · cut in · pop in · show up · turn up", pron:"was/were weak forms · suspense intonation (slow background, punch the interruption)", technique:"Full H-C-E-P: Hook → Context (past cont) → Events (past simple) → Punchline", exitTask:"The Day Everything Went Wrong (3 min): dramatic story with all 4 H-C-E-P parts." },
+  "A2-3": { canDo:"Compare who I used to be vs who I am now in a 3-min 'then vs now' monologue.", grammar:"used to + base; didn't use to; anymore/any longer/no longer.", traps:"'I used to playing' → used to + base · 'I don't play no more' → not anymore", chunks:"I've turned over a new leaf · Those days are behind me · I'm not that person anymore · It's a thing of the past · Old habits die hard.", pv:"grow out of · get over · move on from · kick the habit · fall back into", pron:"'used to' → /ˈjuːstə/", technique:"Then/Now monologue + Backchanneling (Really? Wow, big change)", exitTask:"Then vs Now (3 min): how you've changed; correct used to + ≥1 anymore." },
+  "A2-4": { canDo:"Discuss plans (going to), spontaneous decisions (will), and fixed arrangements (present cont) in one planning conversation.", grammar:"going to (intentions); will (predictions/spontaneous/promises); present continuous (fixed arrangements).", traps:"'I will visit' (planned) → I'm going to visit · 'Tomorrow I work' → I'm working tomorrow", chunks:"I'm playing it by ear · The future looks bright · One step at a time · Time will tell · Fingers crossed.", pv:"plan ahead · look forward to · count on · set up · call off", pron:"'going to' → /ɡʌnə/ — train the EAR first", technique:"H-C-E-P for future ('how I imagine it'll go') + AAA", exitTask:"Weekend Plan (3 min): plan a weekend using all 3 future forms + ≥1 spontaneous will." },
+  "A2-5": { canDo:"Propose, accept, and reject plans in a group decision, explaining purpose.", grammar:"object pronouns (me/you/him/her/it/us/them); let's / let's not; purpose (for + noun / to + verb).", traps:"'I saw she' → I saw her · 'For to improve' → to improve · 'Let's to go' → Let's go", chunks:"Let's call it a day · Let's get the ball rolling · Let's play it safe · Let's sleep on it · I'm in. · Works for me.", pv:"count on · depend on · rely on · fall back on · turn to", pron:"object pronoun weak forms · 'let's' + verb linking", technique:"Group decision-making + diplomatic preview (propose, agree, gently reject)", exitTask:"Plan a Group Outing (3 min): propose/accept/reject + purpose with to+verb." },
+  "A2-6": { canDo:"Give advice, express obligation, and agree/disagree naturally in a problem-solving chat.", grammar:"can/could/should/must/have to/may/might; agreement (also/too/as well/so do I); NEW: Tag questions (right?, isn't it?, don't you?).", traps:"'I must to go' → I must go · 'I am agree' → I agree · 'no?' universal → match auxiliary (isn't it?)", chunks:"I couldn't agree more · That makes two of us · Tell me about it · You can say that again · I see your point · Easier said than done.", pv:"go along with · side with · stick to · back down · stand firm", pron:"modal weak forms · tag intonation (real Q ↗, rhetorical ↘)", technique:"Agree/Disagree politely + tag questions to invite agreement", exitTask:"Give Me Advice (3 min): give advice + ≥2 tag questions + agree/disagree." },
+  "A2-7": { canDo:"Compare two options (jobs, cities, products) and argue which is better and best.", grammar:"comparative (-er/more); superlative (-est/most); as...as; indirect object position (give her a gift / give a gift to her).", traps:"'more better' → better · 'more big' → bigger · 'Explain me' → Explain it to me · 'as tall than' → as tall as", chunks:"Comparing apples and oranges · Night and day · A far cry from... · It doesn't hold a candle to... · Hands down the best · No contest.", pv:"measure up · stack up · live up to · fall short · come close", pron:"comparative -er /ər/ · final clusters: 'asked' /æskt/, 'months' /mʌnθs/", technique:"Justified comparison (opinion + reason) — opinion-expression preview", exitTask:"This or That (3 min): compare 2 options + pick best with reasons; no 'more better', correct explain it to me." },
+  "A2-8": { canDo:"Tell a personal story in clear sequence using reflexive pronouns naturally.", grammar:"sequence (first/then/after that/finally); reflexives (myself...); each other; by myself.", traps:"'I cut me' → I cut myself · 'We love us' → We love each other · 'by my own' → by myself", chunks:"I couldn't help myself · I caught myself... · I had to pull myself together · Make yourself at home · Help yourself · Suit yourself.", pv:"help yourself · behave yourself · enjoy yourself · watch yourself · pull yourself together", pron:"reflexive stress (-SELF) · sequence-connector intonation", technique:"H-C-E-P + sequencing for clarity + backchanneling", exitTask:"A Story About Me (3 min): sequenced personal story + ≥2 reflexives." },
+  "A2-9": { canDo:"Describe and guess people, places, and objects using compound pronouns in a 20-questions game.", grammar:"somebody/someone/something/somewhere (+ else); every-/no-/any-; none of; each of.", traps:"'I didn't see nobody' → I didn't see anybody · 'Somebody have called' → has called · 'something more' → something else", chunks:"Something's fishy · Nothing to write home about · It's nothing special · Anything but... · No big deal · Nothing ventured, nothing gained.", pv:"sort out · figure out · work out · rule out · leave out", pron:"compound-pronoun stress · 'else' linking", technique:"Guessing game = question sprint (question formation under pressure)", exitTask:"20 Questions (3 min): guess coach's mystery person/object via yes/no; correct compound pronouns." },
+  "A2-10": { canDo:"Explain how long my routines/projects take and describe experiences with correct -ed/-ing adjectives.", grammar:"it takes + time + to + verb; -ed adjectives (feelings: bored, excited) vs -ing (qualities: boring, exciting).", traps:"'I'm boring' → I'm bored · 'The class takes me' → It takes me · 'I'm exciting' → I'm excited", chunks:"Time flies · Time is money · Better late than never · In the nick of time · Good things take time · Rome wasn't built in a day.", pv:"drag on · speed up · slow down · hurry up · take up", pron:"'it takes' linking · -ed vs -ing adjective stress", technique:"Pro Track checkpoint: describe past project and future one with full A2 toolkit", exitTask:"My Project (Pro Track, 3-4 min): describe real past project + future one with durations and feelings." },
+  // ── B1 ──
+  "B1-1": { canDo:"Interview someone about life experiences (Have you ever...?) and dig into details by switching to past simple.", grammar:"have/has + past participle; ever/never; yet/already/just; been vs gone.", traps:"'I've been to Paris last year' → I went to Paris · 'He has gone to the store' (and back) → He's been · 'I have 3 years living here' → I've lived here for 3 years", chunks:"Been there, done that · I've been around · I've had my fair share · I've been in your shoes · Have you ever...? · You name it.", pv:"been through · come across · take up · get into · settle down", pron:"have/has contractions /əv/ /əz/ · 'I've been' → /aɪvbɪn/", technique:"Summarize-then-Respond intro", exitTask:"Experience Interview (3-4 min): Have you ever...? + 3 detail follow-ups in past simple." },
+  "B1-2": { canDo:"Accurately choose between 'I've done' and 'I did' depending on whether time is finished — the #1 tense decision for Latin speakers.", grammar:"finished time (yesterday, last week, in 2020) → past simple; unfinished/unspecified (ever, this week, recently) → present perfect; for/since.", traps:"Pretérito overuse: 'Did you finish already?' → Have you finished yet? · 'I lost my keys' (still looking) → I've lost · for/since swapped", chunks:"For as long as I can remember · Since day one · It's been ages · Time has flown by · It feels like forever · For the time being.", pv:"keep on · carry on · go on · hold on · move on", pron:"for weak /fər/ · since stress · stress-timing drill", technique:"Circumlocution intro + Summarize-then-Respond", exitTask:"Finished or Not? (3 min): long-running vs finished parts of life; correct for/since + ≥1 result-now perfect." },
+  "B1-3": { canDo:"Explain what I've been doing lately and justify my current state.", grammar:"have/has been + -ing; How long have you been...?; PP simple vs continuous; lately/recently.", traps:"'I'm working here since' → I've been working here since · 'I have been knowing him' → I've known him", chunks:"I've been burning the midnight oil · I've been swamped · I've been running on empty · I've been going non-stop · I've been meaning to...", pv:"keep up · catch up · keep at it · plug away · soldier on", pron:"been weak /bɪn/ · continuous rhythm", technique:"Update Framework intro (Pro): Situation → what's been happening → next step", exitTask:"What I've Been Up To (3 min): recent activities + justify current state with PPC." },
+  "B1-4": { canDo:"Tell a layered story making clear which past event happened first, using past perfect 3+ times.", grammar:"had + pp; before/after; by the time; already/never.", traps:"using past simple for both events → earlier one with had+pp · 'I had ate' → I had eaten", chunks:"By the time I knew it · It was too late · The damage was done · Little did I know · Water under the bridge · Hindsight is 20/20.", pv:"set off · take off · turn out · end up · find out", pron:"had contractions /əd/ /d/ · 'I'd already' linking", technique:"H-C-E-P + Past Perfect for backstory layering", exitTask:"A Story With Backstory (3 min): one event clearly precedes another; ≥3 natural past perfects." },
+  "B1-5": { canDo:"Pitch my 5-year vision: where I'll be living, what I'll be doing, what I'll have achieved.", grammar:"will have + pp (completion); will be + -ing (in progress); by + time; this time next year.", traps:"'I will have graduate' → I will have graduated · simple future for projection → will have + pp", chunks:"By this time next year · The best is yet to come · Sooner or later · All in good time · Onwards and upwards · The sky's the limit.", pv:"wind up · end up · turn out · work out · pan out", pron:"'will have' → /wɪləv/", technique:"Pro Track: vision pitch (Update framework, future-facing)", exitTask:"5-Year Vision (3 min): Pro pitch with future perfect + continuous; both forms + by + time." },
+  "B1-6": { canDo:"Negotiate real plans and consequences using first conditional with if/unless/as long as.", grammar:"If + present, will + verb; unless (= if not); as long as / provided that; when + present for future.", traps:"'If it will rain' → If it rains · 'When I will see him' → When I see him", chunks:"If worse comes to worst · If all else fails · If push comes to shove · No strings attached · Fair enough · It's a deal.", pv:"deal with · cope with · face up to · prepare for · watch out for", pron:"if-clause intonation (pause before result)", technique:"Negotiation preview (if/then offers) + Summarize-then-Respond", exitTask:"Make a Deal (3 min): negotiate real scenario; no 'will' in if-clause, ≥1 unless/as long as." },
+  "B1-7": { canDo:"Explore hypothetical scenarios and give advice with 'If I were you...' in a dilemma.", grammar:"If + past, would/could/might + verb; If I were; wish + past.", traps:"'If I would win' → If I won · 'If I was you' → If I were you · 'I wish I have' → I wish I had", chunks:"In a perfect world · If only · Wishful thinking · A pipe dream · Not in a million years · If I were in your shoes.", pv:"dream of · wish for · hope for · long for · count on", pron:"would weak /əd/ /d/ · 'I'd' linking", technique:"Advice-giving (If I were you) + opinion expression", exitTask:"What Would You Do? (3 min): dilemma + hypothetical advice; no would in if-clause, wish + past." },
+  "B1-8": { canDo:"Describe a process or news event in passive voice when the agent doesn't matter.", grammar:"am/is/are + pp (present); was/were + pp (past); by + agent; 'It is said that...'", traps:"'Is spoke' → is spoken · 'It speaks English here' → English is spoken here · overusing passive (Spanish 'se')", chunks:"It's been said that... · Word has it... · It goes without saying · What's done is done · It is what it is · That's the way it goes.", pv:"be carried out · be put off · be called off · be set up · be brought up", pron:"passive 'be' weak forms · participle stress", technique:"Describing processes neutrally + Update framework (passive for reports)", exitTask:"Explain a Process (3 min): describe how something is made/done; correct passive, agent dropped appropriately." },
+  "B1-9": { canDo:"Accurately relay what a third person said and asked, converting tense and pronouns.", grammar:"say/tell/ask + backshift; pronoun/time changes; reported questions (statement word order). NEW: say vs tell vs speak vs talk.", traps:"'He said me' → He told me · 'She asked me if I am coming' → if I was coming · 'what time is it' → what time it was", chunks:"Word for word · In other words · Straight from the horse's mouth · Through the grapevine · Don't shoot the messenger · To put it another way.", pv:"point out · bring up · go on (talking) · sum up · butt in", pron:"reported-speech intonation · that-clause rhythm", technique:"Relaying messages accurately + Summarize-then-Respond", exitTask:"Message Relay (3 min): coach whispers statement + question; relay both; correct backshift + say/tell/ask." },
+  "B1-10": { canDo:"Use gerunds and infinitives correctly, including meaning shifts.", grammar:"verb + gerund (enjoy/finish/mind/suggest); verb + infinitive (want/need/decide/plan); stop/remember/forget/try. NEW: separable vs inseparable PVs.", traps:"'Before to go' → before going · 'I enjoy to read' → I enjoy reading · 'interested to learn' → interested in learning · 'turn off it' → turn it off", chunks:"I can't help it · It's no use · There's no point in... · It's worth a shot · I'd rather not · I look forward to...", pv:"feel like · care for · look forward to · get used to · put up with", pron:"-ing /ɪŋ/ · to-infinitive reduction /tə/", technique:"Expressing preferences/decisions + circumlocution (paraphrase when stuck)", exitTask:"Decisions & Preferences (3 min): ≥3 verb patterns + ≥1 meaning-shift pair; correct PV separation." },
+  "B1-11": { canDo:"Hold a 5-min unscripted conversation moving fluidly between past/present/future on one topic + deliver a professional status update.", grammar:"REVIEW: perfect tenses, conditionals 1&2, passive, reported speech, gerunds/infinitives.", traps:"Cumulative: perfect vs past · no-will-in-if · If I were · before+gerund · say/tell · for/since", chunks:"Looking back on it now · From now on · So far so good · In retrospect · All things considered · Where do I even start?", pv:"look back · catch up · keep up · sum up · wind up", pron:"complex-sentence rhythm · consolidate stress-timing and schwa", technique:"Full toolkit: Circumlocution + Summarize-then-Respond + Pro Update framework", exitTask:"Status Update + Time Travel (Pro Track, 5 min): professional update + free conversation crossing 3 timelines; ≥5 B1 structures + ≥1 circumlocution." },
+  // ── B2 ──
+  "B2-1": { canDo:"Analyze a past decision and its alternative outcomes using should/would/could have.", grammar:"If + past perfect, would have + pp; could/might have + pp; should have + pp (regret); wish + past perfect.", traps:"'If I would have studied' → If I had studied · 'I should of studied' → I should have · 'would have pass' → passed", chunks:"Hindsight is 20/20 · I could kick myself · I dropped the ball · I missed the boat · I put my foot in my mouth · If only I'd known.", pv:"screw up · mess up · pass up · miss out (on) · back out", pron:"would've /ˈwʊdəv/ · never 'of'", technique:"Soften-then-Strike intro (acknowledge, then state regret/critique)", exitTask:"The Decision I Regret (3 min): past choice + alternative + regret; no would-have in if-clause, no 'should of'." },
+  "B2-2": { canDo:"Connect past causes to present results in a 'sliding doors' conversation.", grammar:"past condition → present result (If I had..., I would be...); present condition → past result (If I were..., I would have...).", traps:"collapsing both clauses to the same time → keep time mismatch deliberate · 'If I would be rich' → If I were rich", chunks:"It's a Catch-22 · Between a rock and a hard place · A double-edged sword · You can't have your cake and eat it · Every cloud has a silver lining.", pv:"end up · turn out · work out · branch out · settle for", pron:"mixed-conditional rhythm · contracted 'I'd' across both results", technique:"PREP intro (structure a hypothetical argument)", exitTask:"Sliding Doors (3 min): how one past change would alter your present; correct mixed structure." },
+  "B2-3": { canDo:"Describe services and delegated tasks with causatives (I had my website redesigned).", grammar:"passive in all tenses; causative have/get + object + pp; get + object + pp (informal); 'It is believed that...'", traps:"'I repaired my car' (when someone else did) → I had my car repaired · 'I cut my hair' (at a salon) → I got my hair cut", chunks:"It serves you right · You reap what you sow · What goes around comes around · A wake-up call · Food for thought · Actions have consequences.", pv:"carry out · take care of · sort out · set up · hand over", pron:"passive 'be' weak forms · causative rhythm (HAD my car rePAIRED)", technique:"Pro: delegating & reporting tasks in a meeting", exitTask:"What I Get Done (3 min): describe delegated/service tasks; ≥2 causatives + ≥1 advanced-tense passive." },
+  "B2-4": { canDo:"Define and enrich ideas with relative clauses, distinguishing essential from extra information.", grammar:"defining (no commas: The man who called); non-defining (commas: My brother, who lives in Paris, is...); whose/where/when; reduced relatives.", traps:"'The man that his car' → The man whose car · 'the city where I was born there' → no extra 'there' · 'the person who I spoke with him' → no resumptive · defining ≠ commas", chunks:"It's not what you know, it's who you know · Birds of a feather flock together · It's a small world · By and large · For the most part.", pv:"rely on (who) · deal with (which) · look up to · count on · get on with", pron:"relative-pronoun weak forms · comma-pause in non-defining", technique:"Precise explanation (add layers without losing the listener)", exitTask:"Define It Precisely (3 min): people/things with both clause types; correct comma logic, whose, no resumptive." },
+  "B2-5": { canDo:"Deliver a 2-min formal pitch using at least 2 emphasis structures (inversion, cleft, emphatic do).", grammar:"negative-adverbial inversion (Never have I seen); cleft (It was John who); what-cleft (What I need is); emphatic do.", traps:"'Never I have seen' → Never have I seen · over-formality in casual talk · 'Is John who called' → It was John who called", chunks:"Make no mistake about it · Mark my words · Without a shadow of a doubt · The long and short of it · Believe you me · I kid you not.", pv:"stand out · point out · single out · bring up · drive home", pron:"emphatic stress · inversion intonation", technique:"Confident pitch + Holding the Floor", exitTask:"The Emphatic Pitch (2 min): persuasive pitch with ≥2 emphasis structures; natural inversion + cleft." },
+  "B2-6": { canDo:"Structure and soften an argument with discourse markers and hedging, disagreeing diplomatically (PREP).", grammar:"addition (furthermore/moreover); contrast (however/nevertheless/on the other hand); cause (therefore/consequently); hedging (sort of/I'd argue/apparently).", traps:"'Actually' ≠ actualmente (use currently) · Spanish-direct → hedge · 'In other hand' → On the other hand", chunks:"Having said that · That being said · On the flip side · Then again · By the same token · To some extent · In a manner of speaking.", pv:"touch on · move on · lead into · wrap up · boil down to", pron:"discourse-marker stress + pause · diplomatic falling intonation", technique:"Full PREP + Soften-then-Strike (level's signature move)", exitTask:"Diplomatic Disagreement (3 min): disagree with coach's position using PREP + hedging; no actually-false-friend." },
+  "B2-7": { canDo:"React instantly with ellipsis and substitution (So do I / I think so / the red one) keeping conversational speed.", grammar:"so do I / neither do I; I think so / hope so; one/ones; auxiliary substitution.", traps:"'Me too' for negatives → Me neither · 'I think yes' → I think so · 'I want the red' → I want the red one · 'So do I want' → So do I", chunks:"Same here · Me neither · You can say that again · That makes two of us · Ditto · Likewise · I second that.", pv:"go along with · back up · chime in · weigh in · jump in", pron:"so/neither rhythm · substitution stress (auxiliary carries it)", technique:"Conversational speed + Interrupting (jump in naturally)", exitTask:"Quick Reactions (2-3 min): rapid-fire agree/disagree; correct so/neither, think so, one/ones, pace maintained." },
+  "B2-8": { canDo:"Compress and elevate narration with participle clauses (Having finished the report, I...).", grammar:"present participle (Walking down the street, I saw); past participle (Seen from above); perfect (Having finished); negative (Not knowing what to do).", traps:"dangling participle (wrong subject) · 'For finishing the report' → Having finished the report", chunks:"Speaking of which · Generally speaking · Strictly speaking · Broadly speaking · To put it bluntly · Truth be told.", pv:"carry on · move on · build up to · set off · wind down", pron:"participle-clause linking · sophisticated falling intonation", technique:"Elevated narration (compress two clauses into one)", exitTask:"Compressed Story (3 min): retell event with ≥3 participle clauses; no dangling, correct perfect participle." },
+  "B2-9": { canDo:"Speculate about present and past situations with calibrated certainty (must/might/can't have) in a mystery discussion.", grammar:"must (certain +); can't (certain −); might/may/could (possible); must have/might have/can't have + pp (past deduction).", traps:"'He must to be tired' → He must be tired · 'must have forget' → must have forgotten · can't have (deduction) ≠ mustn't (prohibition)", chunks:"Your guess is as good as mine · It's anyone's guess · I haven't got a clue · It remains to be seen · It's up in the air · Beats me.", pv:"figure out · work out · piece together · rule out · narrow down", pron:"modal weak forms · 'must've/might've' reductions", technique:"Calibrated certainty (hedge or assert based on evidence)", exitTask:"Solve the Mystery (3 min): deduce from clues with present + past modals; must have + pp; can't-have vs mustn't distinction." },
+  "B2-10": { canDo:"Express wishes, regrets, and complaints (I wish / If only / I wish you would) with natural intonation.", grammar:"wish + past (present regret); wish + past perfect (past regret); wish + would (complaint); if only (stronger).", traps:"'I wish I know' → I wish I knew · 'I wish I would have' → I wish I had · 'I wish you listen' → I wish you would listen", chunks:"If only · Would that it were · It's a crying shame · What a pity · To my lasting regret · Live and learn.", pv:"long for · yearn for · pine for · hanker after · kick oneself", pron:"wish/if-only stress · wistful intonation", technique:"Expressing regret/complaint diplomatically (soften-then-strike applied to grievances)", exitTask:"Regrets & Complaints (3 min): present + past regrets + 1 diplomatic complaint; wish + would for complaint." },
+  "B2-11": { canDo:"Defend a position in a formal 10-min debate deploying 5+ B2 structures + survive a professional meeting.", grammar:"REVIEW: conditionals 3 & mixed · advanced passive/causative · relatives · inversion · discourse · deduction · wish/regret.", traps:"Cumulative: no-would-in-if · should-have · causative · whose · inversion order · actually false friend · wish+knew", chunks:"At the end of the day · When all is said and done · The bottom line is · By and large · On the whole · Let's agree to disagree.", pv:"kick off · run through · follow up (on) · wrap up · circle back", pron:"connected-speech consolidation · debate prosody", technique:"Full PREP + Soften-then-Strike + Interrupting & Holding the Floor (complete debate kit)", exitTask:"The Debate + The Meeting (Pro Track, ~10 min): debate + meeting roleplay; ≥5 B2 structures + ≥1 polite interruption + ≥1 soften-then-strike." },
+  // ── C1 ──
+  "C1-1": { canDo:"Deploy 8+ common idioms accurately and naturally in one informal conversation, without forcing them.", grammar:"Advanced Structure — Fixed collocations & idiom grammar: idioms resist alteration (spill the beans, not spill beans); intensifier collocations (highly unlikely, bitterly disappointed).", traps:"literal translation of Spanish idioms · over-formal register where idioms belong · mis-collocation ('do a party' → throw a party)", chunks:"a piece of cake · let the cat out of the bag · kill two birds with one stone · break a leg · bite the bullet · under the weather · spill the beans · once in a blue moon · speak of the devil · beat around the bush · hit the nail on the head · pull someone's leg.", pv:"get along · fall out · make out · work out · turn up", pron:"idiomatic stress & reductions · flapping ('get along' → /ɡeɾəˈlɔŋ/)", technique:"Strategic humor (land an idiom for effect, read the room)", exitTask:"Idiom-Rich Chat (4 min): informal conversation with ≥8 natural idioms; no literal calques." },
+  "C1-2": { canDo:"Use multi-meaning PVs across contexts, choosing separable/inseparable correctly at speed.", grammar:"PV grammar mastery: separable vs inseparable; transitive vs intransitive; literal vs figurative; 3-part PVs (put up with, look forward to, get on with).", traps:"avoiding PVs (sounds bookish) · 'turn off it' → turn it off · 'put up with it' word order", chunks:"put up with · look forward to · run out of · get along with · come up with · fall behind · catch up with · keep up with · figure out · give up · look after · make up.", pv:"(this chapter IS phrasal verbs)", pron:"particle stress (PUT it OFF) · reductions at speed", technique:"Register Surfing intro (PVs are informal — when to swap for Latinate)", exitTask:"Phrasal Verb Sprint (3 min): 10 PVs across contexts with pronoun objects; ≥1 three-part PV." },
+  "C1-3": { canDo:"Deliver the same message in 3 registers (friend / colleague / executive), adapting vocab, grammar, and tone on demand.", grammar:"Register grammar: contraction vs full form; phrasal vs Latinate (get → obtain); nominalization (we decided → the decision was made); modal politeness gradient.", traps:"Spanish formality maps differently (usted ≠ full forms) · formal false friends (assist ≠ asistir; eventually ≠ eventualmente) · over-formal email English", chunks:"kids/children · buy/purchase · help/assist · start/commence · Can you/Would you mind · Maybe/Perhaps · But/However · So/Therefore · About/Regarding · find out/ascertain · let/permit.", pv:"tone down · dial up · switch over · shift to · adapt to", pron:"register-appropriate intonation (warmer casual, measured formal)", technique:"Register Surfing (level's signature drill) + STAR for professional self-presentation", exitTask:"Three Registers (3 min): same message (e.g. declining an invite) to friend, colleague, VP; clear shifts across all 3 dimensions." },
+  "C1-4": { canDo:"Detect sarcasm and irony in native speech and respond in kind, with appropriate timing and intonation.", grammar:"Irony grammar: rhetorical questions; understatement/overstatement; double negatives for effect (not bad at all); tag questions for sarcasm.", traps:"missing sarcasm cues (intonation-carried, not lexical) · literal interpretation · humor that doesn't translate (timing & cultural refs differ)", chunks:"Yeah, right! · Tell me about it · No way! · You don't say! · Oh, that's just great · Could this day get any worse? · As if! · Big deal · Oh, wonderful · Just what I needed · Story of my life.", pv:"crack up · crack down on · mess around · fool around · show off", pron:"sarcasm intonation (flat/drawn-out delivery) — make-or-break · /dʒ/ vs /j/ (joke, not 'yoke')", technique:"Reading & returning humor; safe self-deprecation", exitTask:"Spot the Sarcasm (3 min): coach delivers sincere/sarcastic lines; identify and return sarcasm; no literal misreads." },
+  "C1-5": { canDo:"Tell a suspenseful 5-min story with flashbacks, cliffhangers, and direct speech that keeps listeners engaged.", grammar:"Narrative grammar: historic present for drama (So I walk in and he goes...); direct speech with be like/go; fronting for suspense (Out of the shadows came...).", traps:"over-using past simple flatly (no tense variation) · 'he said me' · literal connectors instead of narrative ones", chunks:"Once upon a time · It all started when... · Little did I know · To cut a long story short · The next thing I knew · Out of nowhere · Believe it or not · Just when I thought... · And that's when... · Plot twist · Against all odds.", pv:"build up · wind up · sum up · lead up to · set up (the scene)", pron:"dramatic pacing & pauses · pitch range (Spanish narrower — stretch it)", technique:"Suspense engineering (cliffhangers, strategic pause) + extension", exitTask:"The Gripping Story (5 min): suspenseful story with flashback + cliffhanger + direct speech; listener stays hooked." },
+  "C1-6": { canDo:"Lead a negotiation roleplay: propose, counter, compromise, and close using softening strategically.", grammar:"Negotiation grammar: conditional bargaining (If you..., we could...); softened proposals (Would you be open to...?); concession (I take your point, however...).", traps:"too direct or too deferential (register miscalibrated) · 'I am agree' · literal 'we make a deal' timing", chunks:"What if we...? · How about...? · Would you consider...? · Let's meet halfway · Let's compromise · I'm willing to... · Would you be open to...? · That's a fair point · Let's think outside the box · That's my final offer · Take it or leave it · We have a deal · The ball's in your court.", pv:"work out · sort out · iron out · hammer out · back down", pron:"diplomatic intonation · stress on key terms in an offer", technique:"Pro: lead negotiation (propose→counter→compromise→close) + soften-then-strike applied live", exitTask:"Close the Deal (Pro Track, 4 min): negotiate real-ish scenario to close; ≥3 softened proposals + ≥1 concession." },
+  "C1-7": { canDo:"Respond to emotional situations with calibrated empathy, matching extreme adjectives and supportive expressions to the moment.", grammar:"Emotional grammar: gradable vs extreme adjectives (very tired vs exhausted — no 'very exhausted'); intensifier collocations (absolutely devastated); empathetic conditionals.", traps:"very + extreme adjective · emotional false friends (sensible = sensato, not sensitive) · under-reacting (English expects verbal empathy)", chunks:"over the moon · devastated · furious · petrified · exhausted · thrilled · heartbroken · I can imagine how you feel · That must be hard · I feel your pain · I'm here for you · Hang in there · I've got your back.", pv:"break down · cheer up · calm down · open up · reach out", pron:"warm/supportive intonation · softening tone", technique:"Calibrated empathy (match intensity to the situation) + active listening", exitTask:"Be There for Someone (3 min): coach shares a problem; respond empathetically; correct gradable/extreme, ≥3 empathy expressions, no very+extreme." },
+  "C1-8": { canDo:"Build and defend a critical argument citing evidence, conceding points, and counter-arguing.", grammar:"Argument grammar: concessive clauses (Although/While/Despite the fact that); evidential framing (Given that..., it follows that...); cleft for emphasis.", traps:"'Despite of' → despite / in spite of · 'Although... but...' (no double) · over-asserting without hedging", chunks:"From my perspective · If you ask me · The way I see it · I'm inclined to believe · My take is... · I see your point, but... · While I understand..., I think... · On the contrary · Devil's advocate · The bottom line.", pv:"think through · work through · look into · delve into · back up (with evidence)", pron:"analytical intonation · stress on contrast/concession words", technique:"Concede-then-counter (advanced PREP); citing evidence verbally", exitTask:"Defend Your Position (4 min): debate where student concedes ≥1 point and counters; concessive clause + evidence; no 'despite of'." },
+  "C1-9": { canDo:"Recognize and use common American cultural references and sports metaphors in business small talk.", grammar:"Allusion as shorthand: referential idioms (a Catch-22, a Hail Mary, the elephant in the room); sports metaphors in business (ballpark figure, touch base, hit it out of the park).", traps:"missing the reference · mixing US/UK refs · forcing references unnaturally", chunks:"It's like déjà vu · That's so cliché · It's a Catch-22 · It's a no-brainer · It's a game changer · ballpark figure · touch base · drop the ball · the elephant in the room · a Hail Mary · back to square one · throw a curveball · par for the course.", pv:"catch on · tune in · tune out · keep up with · pick up on", pron:"reference delivery (casual, embedded) · American place/name pronunciation", technique:"Small-talk mastery (first 90 seconds of any call: weather, weekend, sports, traffic) — the Pro pain point", exitTask:"Business Small Talk (3 min): open a call with culturally-aware small talk using ≥3 references/sports metaphors; smooth transition into business." },
+  "C1-10": { canDo:"Navigate a full social event simulation (small talk → storytelling → debate → goodbye) sounding natural throughout.", grammar:"REVIEW: collocations · PV grammar · register · irony · narrative tense · negotiation conditionals · concession · allusion.", traps:"Cumulative: literal calques · false friends (actually/assist/sensible/eventually) · despite of · very+extreme · register miscalibration", chunks:"At the end of the day · It is what it is · You win some, you lose some · That's life · No worries · Every cloud has a silver lining · Roll with the punches · Go with the flow · Better safe than sorry · Onwards and upwards.", pv:"go with · roll with · take in · take on · deal with", pron:"native-rhythm consolidation · flapping + reductions + irony intonation", technique:"All C1 techniques live: Register Surfing + humor + storytelling + small talk + negotiation", exitTask:"The Networking Event (~8 min): arrive → small talk → tell a story → get into a friendly debate → exit gracefully; all 4 phases natural, register-appropriate throughout." },
+  // ── C2 ──
+  "C2-1": { canDo:"Express precise degrees of certainty, agreement, and intensity, choosing among 5+ gradable modifiers deliberately.", grammar:"Gradience grammar: modifier scaling (slightly → somewhat → considerably → radically); downtoners vs intensifiers; not entirely / not necessarily / hardly for precision.", traps:"binary thinking (yes/no) instead of gradience · 'quite' confusion (UK 'very' vs US 'somewhat') · 'rather' misused", chunks:"more or less · to some extent · up to a point · in a sense · sort of · rather · quite · fairly · relatively · slightly · somewhat · marginally · substantially · considerably · dramatically · radically.", pv:"boil down to · come down to · get down to · narrow down · zero in on", pron:"subtle stress shifts that carry degree · contrastive stress for precision", technique:"Precision under pressure (avoid absolutes; calibrate)", exitTask:"Calibrate It (3 min): discuss contested topic with ≥5 degree modifiers deliberately; gradience over binaries." },
+  "C2-2": { canDo:"Deliver a 5-min persuasive speech using 3+ rhetorical devices, moving an audience to a decision.", grammar:"Rhetorical grammar: anaphora (repeated openings); tricolon (rule of three); rhetorical questions; antithesis (not X, but Y); fronting for impact.", traps:"over-ornate Spanish rhetoric transferring as verbose English · 'consider the possibility to' → of + -ing · weak call-to-action", chunks:"Imagine if · Picture this · Just think about · What if I told you? · Here's the thing · The truth is · Let's be honest · At the end of the day · The fact of the matter is · Mark my words · You have my word · I promise you.", pv:"win over · talk into · talk out of · bring around · get through to", pron:"Rule of Three rhythm · strategic pause before the punch · conviction in delivery", technique:"Rule of Three + strategic pause (level's signature delivery move)", exitTask:"The Persuasive Speech (5 min): persuade coach to a decision with ≥3 rhetorical devices; tricolon + strategic pause + clear call-to-action." },
+  "C2-3": { canDo:"Sustain an academic-level discussion deploying sophisticated vocabulary with correct connotation and collocation.", grammar:"Lexical precision grammar: connotation control (positive/negative/neutral synonyms); register-locked collocations (pose a threat, raise concerns, yield results); nominalization for density.", traps:"Latinate over-formality (Spanish cognates sound stiff in casual English) · advanced false friends (comprehensive ≠ comprensivo; eventually ≠ eventualmente) · wrong connotation", chunks:"ubiquitous · ephemeral · pragmatic · ambiguous · inevitable · serendipity · paradigm · dichotomy · nuance · juxtaposition · quintessential · esoteric · pervasive · detrimental · salient · lucid · prudent · resilient.", pv:"dive into · delve into · tap into · draw on · fall back on", pron:"advanced-vocabulary stress (uBIQuitous, ePHEMeral) · precise articulation", technique:"Lexical precision (choosing the exact word for the exact connotation)", exitTask:"Academic Discussion (4 min): discuss abstract topic with ≥6 sophisticated words correctly; no false-friend slips." },
+  "C2-4": { canDo:"Construct a formal argument with thesis, evidence, counter-argument, and rebuttal in a moderated debate.", grammar:"Argument architecture: subordination stacking; logical connectors (insofar as, to the extent that, notwithstanding); conditional concession (even if..., that would not...).", traps:"run-on subordination (Spanish tolerates longer chains) · notwithstanding misused · circular argument from weak connector control", chunks:"The central argument is · The premise is that · This is predicated on · This begs the question · This raises the issue of · The implications are · It follows that · Consequently · By extension · By the same token · Conversely · Ceteris paribus · The burden of proof.", pv:"argue for · argue against · point out · bring up · follow through", pron:"logical-rhythm stress on connectors · rebuttal intonation", technique:"Thesis-Evidence-Counter-Rebuttal (formal debate structure) + Reframing intro", exitTask:"Formal Rebuttal (5 min): moderated debate; student must rebut counter-argument; thesis + evidence + rebuttal + ≥3 correct logical connectors." },
+  "C2-5": { canDo:"Create and sustain an extended metaphor to explain a complex professional concept memorably.", grammar:"Conceptual metaphor grammar: mapping source→target consistently; extending a metaphor across a turn; avoiding mixed/dead metaphors.", traps:"mixed metaphors from literal translation · dead metaphors used as if fresh · over-extending until it breaks", chunks:"Time is money · Life is a journey · Argument is war · The ship has sailed · The ball is in your court · Don't rock the boat · Stay on track · Don't burn bridges · The tip of the iceberg · Moving the needle · A double-edged sword · Weather the storm.", pv:"sail through · steam ahead · drift apart · sink in · drown out", pron:"imagery-supporting intonation · pacing for a landed metaphor", technique:"Extended metaphor as explanatory tool (make the abstract concrete)", exitTask:"Explain by Metaphor (3 min): explain complex work concept via 1 sustained metaphor; consistent source→target, no mixed metaphor." },
+  "C2-6": { canDo:"Participate in academic discourse: hedge claims, cite sources verbally, and challenge methodology respectfully.", grammar:"Academic grammar: the subjunctive (It is essential that he BE present / I suggest that she ARRIVE early); nominalization-heavy style; agentless passive; hedged assertion.", traps:"MISSING subjunctive (that he is → that he BE) · over-personal academic style (Spanish 'yo creo' → English prefers agentless) · investigate vs research register", chunks:"The literature suggests · Research indicates · Evidence points to · It can be argued that · The findings demonstrate · The data reveal · This is consistent with · This contradicts · Further research is needed · The limitations of this study · From a theoretical perspective · The methodological approach.", pv:"draw on · build on · expand on · elaborate on · comment on", pron:"scholarly measured rhythm · hedged-claim intonation", technique:"Hedged assertion + respectful methodological challenge", exitTask:"Challenge the Study (4 min): critique claim's methodology respectfully with ≥1 subjunctive; agentless academic register, hedged not blunt." },
+  "C2-7": { canDo:"Run an executive meeting in English: open, drive the agenda, manage interruptions, synthesize, and close with action items.", grammar:"Executive grammar: nominalized action items (ownership of the rollout sits with...); diplomatic imperatives (let's go ahead and...); strategic future (we'll be positioned to...).", traps:"over-direct or over-soft meeting register · literal corporate calques · 'assist to the meeting' → attend", chunks:"Moving forward · Going forward · At this point in time · In the current climate · Given the circumstances · With that in mind · Let's circle back to · Let's touch base · Let's take this offline · I'll loop you in · I'll keep you posted · Let's align on this · The key takeaway is · Action items are.", pv:"ramp up · scale up · roll out · phase out · follow up on", pron:"executive measured authority · pause to control the floor", technique:"Facilitation (level's signature): open, drive, manage interruptions, synthesize, close", exitTask:"Chair the Meeting (Pro Track, 5 min): student runs meeting with coach as difficult participant; clear open + agenda + ≥1 interruption managed + synthesis + action items." },
+  "C2-8": { canDo:"Use rhetorical and literary devices (rule of three, strategic pause, understatement) for memorable delivery.", grammar:"Stylistic grammar: parallelism; oxymoron/paradox for effect; deliberate understatement (litotes: not bad at all); periodic sentences (delay the point).", traps:"parallelism breaks (Spanish flexibility transfers as inconsistency) · hyperbole that reads as insincere · literal oxymorons", chunks:"busy as a bee · cool as a cucumber · deafening silence · bittersweet · awfully good · pretty ugly · I'm so hungry I could eat a horse · raining cats and dogs · easy as pie · a needle in a haystack · not the end of the world · less is more.", pv:"play on · draw out · play up · play down · sum up", pron:"dramatic delivery · strategic pause as device · parallel-structure rhythm", technique:"Memorable delivery (rule of three + understatement + pause) — rhetorician's polish", exitTask:"The Memorable Line (3 min): deliver short address with ≥2 literary devices; parallelism intact + ≥1 understatement/paradox + pause landed." },
+  "C2-9": { canDo:"Facilitate a cross-cultural discussion, navigating sensitive topics with inclusive language and reframing tension.", grammar:"Diplomatic grammar: maximally hedged disagreement; impersonal framing to depersonalize tension (one might argue); reframing constructions (Perhaps the more useful question is...).", traps:"assuming shared cultural defaults · directness calibrated for LatAm reading as blunt elsewhere · over-generalizing ('the Americans...')", chunks:"In my culture · Where I'm from · Back home · The way we do things · It's customary to · Generally speaking · Of course, this varies · I don't mean to generalize, but · Correct me if I'm wrong · I appreciate your perspective · Let's find common ground · With respect · If I may · Help me understand.", pv:"adapt to · adjust to · fit in · blend in · stand out", pron:"respectful/inclusive intonation · de-escalation tone", technique:"Reframing (level's signature): take tension, reshape into a productive question", exitTask:"Defuse and Reframe (4 min): coach raises tense cross-cultural point; student reframes productively; ≥1 reframing move + inclusive language + tension lowered." },
+  "C2-10": { canDo:"Deliver an executive presentation, survive hostile Q&A, and close a complex negotiation — back to back, in one session.", grammar:"REVIEW: gradience · rhetoric · nominalization · subordination · conceptual metaphor · subjunctive · executive register · literary devices · diplomatic reframing.", traps:"Final checklist: binary vs gradience · missing subjunctive · false friends · despite of · over-/under-directness · parallelism · assist→attend", chunks:"It goes without saying · Needless to say · By definition · Virtually · Essentially · Fundamentally · Ostensibly · Purportedly · Allegedly · Presumably · Arguably · Undoubtedly · Indisputably · In essence · For all intents and purposes · When push comes to shove.", pv:"rise above · rise to · live up to · measure up to · stand up to", pron:"full rhetorical-prosody command · effortless native-like flow", technique:"All C2 techniques live: Reframing + Rule of Three + Facilitation, under pressure", exitTask:"The Executive Gauntlet (Capstone, ~12 min): 4-min exec presentation + hostile Q&A + close complex negotiation; poise under hostility, ≥1 reframing of hostile question, flawless register throughout." },
+};
+
+const LEVEL_ORDER = ["Fn","A1","A2","B1","B2","C1","C2"];
+
+const TECHNIQUES = [
+  { key:"repair-ladder", name:"Repair Ladder", level:"Fn",
+    desc:"Survive class 100% in English: when something breaks, repair with emergency phrases instead of switching to Spanish. Ladder: didn't hear → repeat · didn't understand → what does X mean · stuck → let me think · missing the word → how do you say.",
+    example:"\"Sorry, can you repeat that?\" · \"What does 'schedule' mean?\" · \"How do you say 'madrugar' in English?\"" },
+  { key:"minimal-responses", name:"Minimal Responses", level:"Fn",
+    desc:"Short reactions while the other person speaks, to show you're following the conversation without needing full sentences.",
+    example:"\"Uh-huh... OK... really? ... wow... I see.\"" },
+  { key:"aaa", name:"Answer-Add-Ask (AAA)", level:"A1",
+    desc:"Never answer with a single sentence: answer, add a detail, and bounce back a question. It's the engine of every conversation.",
+    example:"\"Do you exercise?\" → \"Yes, I run twice a week. It clears my head. Do you work out?\"" },
+  { key:"small-talk", name:"Small Talk Ritual", level:"A1",
+    desc:"The first 90 seconds of any conversation: weather, weekend, work, plans. Opens and closes every social or professional interaction.",
+    example:"\"How was your weekend? Anything exciting?\" · \"Crazy weather, huh?\" · \"We should catch up soon.\"" },
+  { key:"politeness", name:"Politeness Register", level:"A1",
+    desc:"Ask for things with the right level of politeness for the context (restaurant, hotel, store). First contact with register-switching.",
+    example:"\"Could I get a coffee, please?\" · \"Would it be possible to change my seat?\" · \"I was wondering if...\"" },
+  { key:"fillers", name:"Buying-Time Fillers", level:"A2",
+    desc:"Buy time to think IN ENGLISH instead of using \"este...\", \"o sea...\". Keeps the conversation alive while you process.",
+    example:"\"Well... let me see... that's a good question... how can I put it...\"" },
+  { key:"hcep", name:"Storytelling H-C-E-P", level:"A2",
+    desc:"Story architecture: Hook → Context (background with past continuous) → Events (past simple) → Punchline. Turns flat anecdotes into stories.",
+    example:"\"You won't believe what happened... I was cooking dinner when suddenly the lights went out...\"" },
+  { key:"backchanneling", name:"Active Backchanneling", level:"A2",
+    desc:"React actively while the other person tells something — the listener works too. Without this, the speaker feels they're talking alone.",
+    example:"\"No way! And then what? That's crazy. You're kidding!\"" },
+  { key:"summarize-respond", name:"Summarize-then-Respond", level:"B1",
+    desc:"Summarize what the other person said before responding. Confirms understanding and gives you time to build your reply.",
+    example:"\"So you've traveled a lot — what's been your favorite trip?\"" },
+  { key:"circumlocution", name:"Circumlocution & Paraphrase", level:"B1",
+    desc:"\"Talk around\" the word that won't come out: describe function, form, or category instead of getting stuck or translating.",
+    example:"\"It's the thing you use to open a bottle... a bottle opener!\"" },
+  { key:"update-framework", name:"Update Framework", level:"B1",
+    desc:"Professional status in 3 parts: current situation → what's been happening (perfect tenses) → next step. The structure of a status report.",
+    example:"\"The project is on track. I've finished the design phase. Next, I'll start testing.\"" },
+  { key:"prep", name:"PREP", level:"B2",
+    desc:"Argument structure: Point → Reason → Example → Point. Organizes any opinion for debate or presentation.",
+    example:"\"Remote work works (P) because it saves commute time (R). My team gained 2 hours a day (E). That's why I support it (P).\"" },
+  { key:"soften-strike", name:"Soften-then-Strike", level:"B2",
+    desc:"Acknowledge the other person's point first, disagree after. Diplomatic disagreement that doesn't create friction.",
+    example:"\"I see your point, and it's valid. However, the data shows the opposite.\"" },
+  { key:"interrupting", name:"Interrupting & Holding the Floor", level:"B2",
+    desc:"Interrupt politely and don't let others take the floor from you in meetings or debates.",
+    example:"\"Sorry to jump in, but...\" · \"Let me just finish this thought.\"" },
+  { key:"register-surfing", name:"Register Surfing", level:"C1",
+    desc:"Same message adapted to 3 registers: friend → colleague → executive. Changes vocabulary, grammar, and tone on demand.",
+    example:"\"Gotta bail tonight\" → \"I can't make it tonight\" → \"I'm afraid I won't be able to attend.\"" },
+  { key:"star", name:"STAR (Self-Promotion)", level:"C1",
+    desc:"Sell yourself professionally without sounding arrogant: Situation → Task → Action → Result. The interview and performance-review structure.",
+    example:"\"Sales dropped (S). I had to fix the funnel (T). I redesigned onboarding (A). Sales rose 30% (R).\"" },
+  { key:"humor", name:"Strategic Humor & Sarcasm", level:"C1",
+    desc:"Detect sarcasm/irony (it's in the intonation, not the words) and return it. Includes safe self-deprecation and reading the room.",
+    example:"\"Another Monday meeting? Oh, wonderful. Just what I needed.\"" },
+  { key:"empathy", name:"Calibrated Empathy", level:"C1",
+    desc:"Respond to emotional situations with the right intensity: extreme adjectives used correctly + supportive expressions. In English, empathy is verbalized.",
+    example:"\"That must be really hard. I'm here for you. Hang in there.\"" },
+  { key:"concede-counter", name:"Concede-then-Counter", level:"C1",
+    desc:"Concede a valid point from the opponent and counter-argue — advanced PREP for critical thinking.",
+    example:"\"That's a valid argument. However, it ignores the long-term cost.\"" },
+  { key:"negotiation", name:"Negotiation", level:"C1",
+    desc:"Lead a full negotiation: propose → counter-offer → concede strategically → close.",
+    example:"\"Would you be open to a 6-month deal?\" · \"Let's meet halfway.\" · \"We have a deal.\"" },
+  { key:"reframing", name:"Reframing", level:"C2",
+    desc:"Take a hostile question or tense topic and reformulate it as a productive question. The tool for difficult Q&A.",
+    example:"\"Perhaps the more useful question is how we prevent this next time.\"" },
+  { key:"rule-of-three", name:"Rule of Three + Strategic Pause", level:"C2",
+    desc:"Rhetorical trios and strategic pause before the key point. The rhythm of memorable speeches.",
+    example:"\"It's faster. It's cheaper. And — (pause) — it's already working.\"" },
+  { key:"facilitation", name:"Facilitation", level:"C2",
+    desc:"Moderate executive meetings: open, drive the agenda, manage interruptions, synthesize, and close with action items.",
+    example:"\"Let's hear Maria first, then circle back.\" · \"To summarize, we agreed on three actions.\"" },
+];
+
+function ProgressView({ user }) {
+  const [students,   setStudents]   = useState(null);
+  const [selId,      setSelId]      = useState("");
+  const [chapProg,   setChapProg]   = useState({});   // { "level-ch": row }
+  const [techProg,   setTechProg]   = useState({});   // { techniqueKey: row }
+  const [openLevels, setOpenLevels] = useState({});
+  const [openChap,   setOpenChap]   = useState("");   // solo un capítulo abierto a la vez
+  const [openTechs,  setOpenTechs]  = useState({});
+  const [myName,     setMyName]     = useState("");
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
+
+  const STATUS_COLORS = [C.border2, C.amber, C.green];
+  const CHAP_LABELS   = ["Not seen", "In progress", "Exit Task passed"];
+  const TECH_LABELS   = ["Not introduced", "Practicing", "Mastered"];
+
+  useEffect(() => {
+    supabase.from("students_basic").select("*").eq("active", true).order("name")
+      .then(({ data, error: e }) => {
+        if (e) setError(e.message); else setStudents(data || []);
+      });
+    supabase.from("profiles").select("nombre").eq("id", user.id).single()
+      .then(({ data }) => setMyName(data?.nombre || ""));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selStudent = (students || []).find(s => s.id === selId) || null;
+
+  const loadProgress = async (sid) => {
+    setLoading(true);
+    const [{ data: ch }, { data: te }] = await Promise.all([
+      supabase.from("student_chapter_progress").select("*").eq("student_id", sid),
+      supabase.from("student_technique_progress").select("*").eq("student_id", sid),
+    ]);
+    const cm = {}; (ch || []).forEach(r => { cm[`${r.level}-${r.chapter}`] = r; });
+    const tm = {}; (te || []).forEach(r => { tm[r.technique] = r; });
+    setChapProg(cm); setTechProg(tm); setLoading(false);
+  };
+
+  const selectStudent = (sid) => {
+    setSelId(sid); setChapProg({}); setTechProg({}); setOpenTechs({}); setOpenChap("");
+    if (!sid) return;
+    const stu = (students || []).find(s => s.id === sid);
+    setOpenLevels(stu?.level ? { [stu.level]: true } : {});
+    loadProgress(sid);
+  };
+
+  const cycleChapter = async (level, chapter) => {
+    const key  = `${level}-${chapter}`;
+    const cur  = chapProg[key]?.status || 0;
+    const next = (cur + 1) % 3;
+    const row  = { student_id: selId, level, chapter, status: next, updated_by: myName, updated_at: new Date().toISOString() };
+    setChapProg(p => ({ ...p, [key]: { ...(p[key] || {}), ...row } }));
+    const { error: e } = await supabase.from("student_chapter_progress")
+      .upsert(row, { onConflict: "student_id,level,chapter" });
+    if (e) { toast("Could not save: " + e.message); loadProgress(selId); }
+  };
+
+  const cycleTechnique = async (tkey) => {
+    const cur  = techProg[tkey]?.status || 0;
+    const next = (cur + 1) % 3;
+    const row  = { student_id: selId, technique: tkey, status: next, updated_by: myName, updated_at: new Date().toISOString() };
+    setTechProg(p => ({ ...p, [tkey]: { ...(p[tkey] || {}), ...row } }));
+    const { error: e } = await supabase.from("student_technique_progress")
+      .upsert(row, { onConflict: "student_id,technique" });
+    if (e) { toast("Could not save: " + e.message); loadProgress(selId); }
+  };
+
+  const fmtWhen = (r) => {
+    if (!r?.updated_at) return "";
+    const d = new Date(r.updated_at);
+    return `${r.updated_by ? r.updated_by.split(" ")[0] + " · " : ""}${d.toLocaleDateString("en", { month: "short", day: "numeric" })}`;
+  };
+
+  const StatusDot = ({ status, onClick, title }) => (
+    <button onClick={onClick} title={title}
+      style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, cursor: "pointer",
+        background: status > 0 ? STATUS_COLORS[status] : "transparent",
+        border: `2px solid ${STATUS_COLORS[status]}`,
+        transition: "all 0.15s" }} />
+  );
+
+  return (
+    <div style={{ width: "100%", maxWidth: 800 }}>
+      {/* Student picker */}
+      <div style={{ ...CARD, borderRadius: 14, padding: "1.1rem 1.25rem", marginBottom: "1rem",
+        display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text3 }}>Student</p>
+        <select value={selId} onChange={e => selectStudent(e.target.value)}
+          style={{ flex: 1, minWidth: 180, background: "#1e1b17", color: C.text, fontFamily: "inherit",
+            fontSize: 13, fontWeight: 600, padding: "0.5rem 0.7rem", borderRadius: 8,
+            border: `1px solid ${C.border2}` }}>
+          <option value="">Select a student...</option>
+          {(students || []).map(s => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        {selStudent && (
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "0.3rem 0.6rem", borderRadius: 6,
+            background: "rgba(37,211,102,0.1)", border: "1px solid rgba(37,211,102,0.25)", color: C.green }}>
+            Level {selStudent.level}
+          </span>
+        )}
+      </div>
+
+      {error && <div style={{ ...CARD, padding: "1rem", marginBottom: "1rem" }}><p style={{ color: "#d95f5f", fontSize: 13 }}>{error}</p></div>}
+
+      {!selId && !error && (
+        <div style={{ ...CARD, padding: "3rem", textAlign: "center" }}>
+          <p style={{ color: C.text3, fontSize: 13 }}>Select a student to see their progress.</p>
+        </div>
+      )}
+
+      {selId && (
+        <>
+          {/* Syllabus Progress header */}
+          <div style={{ margin: "0.2rem 0 0.6rem", display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 4 }}>
+            <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text }}>
+              Syllabus Progress
+            </p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.text2 }}>
+              {LEVEL_ORDER.reduce((acc, lv) => acc + (SYLLABUS[lv]?.chapters.filter(([n]) => (chapProg[`${lv}-${n}`]?.status || 0) === 2).length || 0), 0)}/
+              {LEVEL_ORDER.reduce((acc, lv) => acc + (SYLLABUS[lv]?.chapters.length || 0), 0)} chapters passed
+            </p>
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "0.9rem", paddingLeft: 4 }}>
+            {[0,1,2].map(s => (
+              <span key={s} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.text3 }}>
+                <span style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block",
+                  background: s > 0 ? STATUS_COLORS[s] : "transparent", border: `2px solid ${STATUS_COLORS[s]}` }} />
+                {CHAP_LABELS[s]}
+              </span>
+            ))}
+          </div>
+
+          {/* Chapters by level */}
+          {STU_LEVELS.map(lv => {
+            const conf = SYLLABUS[lv];
+            if (!conf) return null;
+            const total  = conf.chapters.length;
+            const passed = conf.chapters.filter(([n]) => (chapProg[`${lv}-${n}`]?.status || 0) === 2).length;
+            const open   = !!openLevels[lv];
+            const isCurrent = selStudent?.level === lv;
+            return (
+              <div key={lv} style={{ ...CARD, borderRadius: 14, marginBottom: "0.6rem", overflow: "hidden",
+                border: isCurrent ? "1px solid rgba(37,211,102,0.35)" : undefined }}>
+                <div onClick={() => setOpenLevels(p => ({ ...p, [lv]: !p[lv] }))}
+                  style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.9rem 1.1rem", cursor: "pointer" }}>
+                  <span style={{ fontSize: 13, color: C.text3, width: 14 }}>{open ? "▾" : "▸"}</span>
+                  <p style={{ fontSize: 14, fontWeight: 800, color: C.text, flexShrink: 0 }}>{conf.label}</p>
+                  {isCurrent && <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", color: C.green,
+                    textTransform: "uppercase", padding: "0.15rem 0.4rem", borderRadius: 4,
+                    background: "rgba(37,211,102,0.1)" }}>current</span>}
+                  <div style={{ flex: 1, height: 5, borderRadius: 3, background: "rgba(240,236,224,0.07)", minWidth: 60 }}>
+                    <div style={{ width: `${(passed/total)*100}%`, height: "100%", borderRadius: 3,
+                      background: passed === total ? C.green : C.amber, transition: "width 0.3s" }} />
+                  </div>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: passed === total ? C.green : C.text2, flexShrink: 0 }}>
+                    {passed}/{total}
+                  </p>
+                </div>
+                {open && (
+                  <div style={{ borderTop: `1px solid ${C.border}` }}>
+                    {conf.chapters.map(([n, title], i) => {
+                      const chapKey = `${lv}-${n}`;
+                      const row     = chapProg[chapKey];
+                      const st      = row?.status || 0;
+                      const info    = CHAPTER_INFO[chapKey];
+                      const chOpen  = openChap === chapKey;
+                      return (
+                        <div key={n} style={{ borderBottom: i < conf.chapters.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", padding: "0.65rem 1.1rem" }}>
+                            <StatusDot status={st} title={CHAP_LABELS[st]} onClick={() => cycleChapter(lv, n)} />
+                            <div onClick={() => info && setOpenChap(cur => cur === chapKey ? "" : chapKey)}
+                              style={{ flex: 1, display: "flex", alignItems: "center", gap: "0.5rem",
+                                cursor: info ? "pointer" : "default", minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 600, flex: 1,
+                                color: st === 2 ? C.text3 : C.text,
+                                textDecoration: st === 2 ? "line-through" : "none" }}>
+                                <span style={{ color: C.text3, fontWeight: 700, marginRight: 6 }}>Ch {n}</span>{title}
+                              </p>
+                              {st > 0 && <p style={{ fontSize: 10, color: C.text3, flexShrink: 0 }}>{fmtWhen(row)}</p>}
+                              {info && <span style={{ fontSize: 11, color: C.text3, flexShrink: 0, marginLeft: 4 }}>{chOpen ? "▾" : "▸"}</span>}
+                            </div>
+                          </div>
+                          {chOpen && info && (
+                            <div style={{ padding: "0.2rem 1.1rem 1rem 3rem", display: "flex", flexDirection: "column", gap: 8 }}>
+                              {[
+                                ["Can-Do", info.canDo],
+                                ["Grammar", info.grammar],
+                                ["Spanish Traps", info.traps],
+                                ["Chunks / Idioms", info.chunks],
+                                ["Phrasal Verbs", info.pv],
+                                ["Pronunciation", info.pron],
+                                ["Technique", info.technique],
+                                ["Exit Task", info.exitTask],
+                              ].map(([label, content], j) => (
+                                <div key={j}>
+                                  <p style={{ fontSize: 10, fontWeight: 800, color: C.text3, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>{label}</p>
+                                  <p style={{ fontSize: 12, color: C.text2, lineHeight: 1.55 }}>{content}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Communication Techniques Progress */}
+          <div style={{ margin: "1.8rem 0 0.6rem", display: "flex", alignItems: "center", justifyContent: "space-between", paddingLeft: 4 }}>
+            <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text }}>
+              Communication Techniques Progress
+            </p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.text2 }}>
+              {TECHNIQUES.filter(t => (techProg[t.key]?.status || 0) === 2).length}/{TECHNIQUES.length} mastered
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "0.9rem", paddingLeft: 4 }}>
+            {[0,1,2].map(s => (
+              <span key={s} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: C.text3 }}>
+                <span style={{ width: 12, height: 12, borderRadius: "50%", display: "inline-block",
+                  background: s > 0 ? STATUS_COLORS[s] : "transparent", border: `2px solid ${STATUS_COLORS[s]}` }} />
+                {TECH_LABELS[s]}
+              </span>
+            ))}
+          </div>
+          {/* Techniques grouped by level */}
+          {LEVEL_ORDER.map(lv => {
+            const techs = TECHNIQUES.filter(t => t.level === lv);
+            if (!techs.length) return null;
+            const lvLabel = SYLLABUS[lv]?.label || lv;
+            return (
+              <div key={lv} style={{ marginBottom: "0.9rem" }}>
+                <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase",
+                  color: C.text3, marginBottom: 6, paddingLeft: 4 }}>{lvLabel}</p>
+                <div style={{ ...CARD, borderRadius: 14, overflow: "hidden" }}>
+                  {techs.map((t, i) => {
+                    const row  = techProg[t.key];
+                    const st   = row?.status || 0;
+                    const open = !!openTechs[t.key];
+                    return (
+                      <div key={t.key} style={{ borderBottom: i < techs.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.8rem", padding: "0.65rem 1.1rem" }}>
+                          <StatusDot status={st} title={TECH_LABELS[st]} onClick={() => cycleTechnique(t.key)} />
+                          <div onClick={() => setOpenTechs(p => ({ ...p, [t.key]: !p[t.key] }))}
+                            style={{ flex: 1, display: "flex", alignItems: "center", gap: "0.6rem", cursor: "pointer", minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: st === 2 ? C.text3 : C.text }}>{t.name}</p>
+                            <span style={{ fontSize: 11, color: C.text3, marginLeft: "auto", flexShrink: 0, paddingLeft: 8 }}>
+                              {st > 0 && <span style={{ marginRight: 8 }}>{fmtWhen(row)}</span>}{open ? "▾" : "▸"}
+                            </span>
+                          </div>
+                        </div>
+                        {open && (
+                          <div style={{ padding: "0 1.1rem 0.9rem 3rem" }}>
+                            <p style={{ fontSize: 12, color: C.text2, lineHeight: 1.55, marginBottom: 6 }}>{t.desc}</p>
+                            <p style={{ fontSize: 12, color: C.text3, fontStyle: "italic", lineHeight: 1.5 }}>{t.example}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          <div style={{ marginBottom: "2rem" }} />
+          {loading && <p style={{ fontSize: 12, color: C.text3, textAlign: "center", marginBottom: "1rem" }}>Loading progress...</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── COACHES VIEW ───────────────────────────────────────────────
 // Admin-only: weekly coach hours + payroll with / without IVA.
-// Rates ($/hr) are editable inline and persisted in localStorage.
+// Rates (₡/hr) and per-coach IVA flags are editable inline and persisted in Supabase (coach_rates).
 function CoachesView() {
   const [tab,         setTab]         = useState("week");   // "week" | "month"
   const [weekOffset,  setWeekOffset]  = useState(0);
@@ -6022,22 +6858,35 @@ function CoachesView() {
   const [receiptPaths,     setReceiptPaths]     = useState({}); // { coach: { partial, final } } paths in storage
   const [receiptUrls,      setReceiptUrls]      = useState({}); // { coach: { partial, final } } signed URLs
   const [receiptUploading, setReceiptUploading] = useState({}); // { coach: { partial, final } } bool
+  const [ivaFlags,         setIvaFlags]         = useState({}); // { coachName: bool }
+  const [ivaSaving,        setIvaSaving]        = useState({}); // { coachName: bool }
+  // ── Roster management ──
+  const [rosterOpen,   setRosterOpen]   = useState(false);
+  const [rosterRows,   setRosterRows]   = useState([]);   // full coach_rates rows
+  const [rosterSaving, setRosterSaving] = useState(false);
+  const [addForm,      setAddForm]      = useState({ name: "", email: "", color: "#e6c229", rate: "", iva: false });
 
-  const IVA      = 0.02;
+  const VALID_COACHES = getCoachNames();
+  const IVA      = IVA_RATE;
   const sym      = "₡";
   const fmtMoney = n => n < 0
     ? `-₡${Math.round(-n).toLocaleString("es-CR")}`
     : `₡${Math.round(n).toLocaleString("es-CR")}`;
 
-  // ── Load rates from Supabase ──────────────────────────────────────
+  // ── Load rates + iva from Supabase ───────────────────────────────
   useEffect(() => {
-    supabase.from("coach_rates").select("coach_name, rate")
+    supabase.from("coach_rates").select("coach_name, rate, iva, email, color, active")
       .then(({ data, error: e }) => {
         if (!e && data) {
-          const map = {};
-          data.forEach(r => { map[r.coach_name] = r.rate; });
-          setRates(map);
-          setRateInputs(map);
+          setRosterRows(data);
+          const rMap = {}, iMap = {};
+          data.forEach(r => {
+            rMap[r.coach_name] = r.rate;
+            iMap[r.coach_name] = r.iva ?? true;
+          });
+          setRates(rMap);
+          setRateInputs(rMap);
+          setIvaFlags(iMap);
         }
       });
   }, []);
@@ -6072,8 +6921,7 @@ function CoachesView() {
     return { start, end, year: d.getFullYear(), month: d.getMonth() };
   };
 
-  const MONTH_NAMES = ["January","February","March","April","May","June",
-                       "July","August","September","October","November","December"];
+  const MONTH_NAMES = MONTHS_LONG;
 
   const yearMonthKey = (offset) => {
     const { year, month } = getMonthBounds(offset);
@@ -6089,7 +6937,7 @@ function CoachesView() {
     });
     const data = await res.json();
     if (!Array.isArray(data)) throw new Error("Could not load schedule.");
-    return data.filter(ev => ev.coach?.trim() && ev.coach.trim() !== "Unassigned");
+    return data.filter(ev => ev.coach?.trim() && VALID_COACHES.includes(ev.coach.trim()));
   };
 
   // Request-id guards prevent stale async responses from overwriting newer results
@@ -6192,6 +7040,51 @@ function CoachesView() {
     setRatesSaving(prev => ({ ...prev, [coach]: false }));
   };
 
+  const handleIvaToggle = async (coach) => {
+    const next = !(ivaFlags[coach] ?? true);
+    setIvaFlags(prev => ({ ...prev, [coach]: next }));
+    setIvaSaving(prev => ({ ...prev, [coach]: true }));
+    await supabase.from("coach_rates").upsert(
+      { coach_name: coach, iva: next, updated_at: new Date().toISOString() },
+      { onConflict: "coach_name" }
+    );
+    setIvaSaving(prev => ({ ...prev, [coach]: false }));
+  };
+
+  // ── Roster management ─────────────────────────────────────────────
+  const saveNewCoach = async () => {
+    const name  = addForm.name.trim();
+    const email = addForm.email.trim().toLowerCase();
+    if (!name) return toast("Name is required");
+    if (!/^[a-z0-9._-]+@dilo\.club$/.test(email)) return toast("Email must end in @dilo.club");
+    if (email.split("@")[0] !== name.toLowerCase())
+      return toast(`Name must match the email prefix (${email.split("@")[0]} → ${email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1)})`);
+    setRosterSaving(true);
+    const row = { coach_name: name, email, color: addForm.color, rate: parseFloat(addForm.rate) || 0,
+      iva: addForm.iva, active: true, updated_at: new Date().toISOString() };
+    const { error: e } = await supabase.from("coach_rates").upsert(row, { onConflict: "coach_name" });
+    if (e) toast("Could not save: " + e.message);
+    else {
+      toast(`${name} added to roster`);
+      setAddForm({ name: "", email: "", color: "#e6c229", rate: "", iva: false });
+      setRosterRows(prev => [...prev.filter(r => r.coach_name !== name), row].sort((a, b) => a.coach_name.localeCompare(b.coach_name)));
+      setRates(prev => ({ ...prev, [name]: row.rate }));
+      setRateInputs(prev => ({ ...prev, [name]: String(row.rate) }));
+      setIvaFlags(prev => ({ ...prev, [name]: row.iva }));
+      await loadCoachRoster();
+    }
+    setRosterSaving(false);
+  };
+
+  const updateRosterField = async (coach, field, value) => {
+    setRosterRows(prev => prev.map(r => r.coach_name === coach ? { ...r, [field]: value } : r));
+    const { error: e } = await supabase.from("coach_rates")
+      .update({ [field]: value, updated_at: new Date().toISOString() })
+      .eq("coach_name", coach);
+    if (e) toast("Could not save: " + e.message);
+    else await loadCoachRoster();
+  };
+
   // ── Save monthly hours to Supabase ────────────────────────────────
   const saveMonthlyHours = async (rows) => {
     setMonthSaving(true);
@@ -6282,20 +7175,25 @@ function CoachesView() {
   };
 
   // ── Aggregate events → rows ───────────────────────────────────────
+  // Quincenas: Q1 = día 1–15 (inclusive) · Q2 = día 16–fin de mes
   const buildRows = (evs) => {
     const byCoach = {};
     (evs || []).forEach(ev => {
       const c = ev.coach.trim();
-      byCoach[c] = (byCoach[c] || 0) + 1;
+      if (!byCoach[c]) byCoach[c] = { total: 0, q1: 0, q2: 0 };
+      byCoach[c].total++;
+      if (toCRDate(ev.start).getDate() <= 15) byCoach[c].q1++; else byCoach[c].q2++;
     });
     return Object.entries(byCoach)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([coach, classes]) => {
-        const rate  = rates[coach] || 0;
-        const net   = classes * rate;
-        const iva   = net * IVA;
-        const total = net + iva;
-        return { coach, classes, rate, net, iva, total };
+      .map(([coach, { total: classes, q1, q2 }]) => {
+        const rate    = rates[coach] || 0;
+        const hasIva  = ivaFlags[coach] ?? true;
+        const amt     = n => { const net = n * rate; return net + (hasIva ? net * IVA : 0); };
+        const net     = classes * rate;
+        const iva     = hasIva ? net * IVA : 0;
+        return { coach, classes, q1, q2, rate, net, iva, hasIva,
+          total: net + iva, dueQ1: amt(q1), dueQ2: amt(q2) };
       });
   };
 
@@ -6334,10 +7232,10 @@ function CoachesView() {
 
   const PayrollTable = ({ rows, totalHrs, emptyMsg, footer, monthMode = false }) => {
     const headers = monthMode
-      ? ["Coach","Hrs","Rate / hr","Net","VAT 2%","Total","Partial Pay","Date","Final Pay","Date","Pending"]
+      ? ["Coach","Hrs 1–15","Due 1–15","Pay 1–15","Date","Hrs 16–31","Due 16–31","Pay 16–31","Date","Total","Pending"]
       : ["Coach","Hrs","Rate / hr","Net","VAT 2%","Total"];
     const colWidths = monthMode
-      ? [null, 44, 100, 90, 70, 110, 80, 115, 80, 115, 100]
+      ? [null, 52, 95, 85, 115, 52, 95, 85, 115, 110, 100]
       : [null, 50, 100, 100, 80, 110];
     return(
     rows.length === 0
@@ -6346,7 +7244,7 @@ function CoachesView() {
         </div>
       : <>
           <div style={{ ...CARD, borderRadius: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: monthMode ? 1060 : 580 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: monthMode ? 1150 : 580 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   {headers.map((h, i) => (
@@ -6370,6 +7268,7 @@ function CoachesView() {
                       position: "sticky", left: 0, background: C.surface2, whiteSpace: "nowrap" }}>
                       {r.coach.split(" ")[0]}
                     </td>
+                    {!monthMode && <>
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 600, color: C.text2 }}>{r.classes}</td>
                     <td style={{ padding: "0.75rem 0.9rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
@@ -6388,14 +7287,40 @@ function CoachesView() {
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 600, color: r.net > 0 ? C.text : C.text3, whiteSpace: "nowrap" }}>
                       {r.net > 0 ? fmtMoney(r.net) : "—"}
                     </td>
-                    <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 600, color: r.iva > 0 ? C.text2 : C.text3, whiteSpace: "nowrap" }}>
-                      {r.iva > 0 ? fmtMoney(r.iva) : "—"}
+                    <td style={{ padding: "0.75rem 0.9rem", whiteSpace: "nowrap" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div onClick={() => !ivaSaving[r.coach] && handleIvaToggle(r.coach)}
+                          style={{ width:30, height:17, borderRadius:9, flexShrink:0,
+                            background: r.hasIva ? C.green : C.surface2,
+                            border:`1px solid ${r.hasIva ? C.green : C.border2}`,
+                            position:"relative", cursor: ivaSaving[r.coach] ? "default" : "pointer",
+                            transition:"background 0.18s", opacity: ivaSaving[r.coach] ? 0.5 : 1 }}>
+                          <div style={{ position:"absolute", top:2,
+                            left: r.hasIva ? 14 : 2, width:11, height:11,
+                            borderRadius:"50%", transition:"left 0.18s",
+                            background: r.hasIva ? "#fff" : C.text3 }} />
+                        </div>
+                        <span style={{ fontSize:13, fontWeight:600, color: r.iva > 0 ? C.text2 : C.text3 }}>
+                          {r.iva > 0 ? fmtMoney(r.iva) : "—"}
+                        </span>
+                      </div>
                     </td>
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 800, color: r.total > 0 ? C.green : C.text3, whiteSpace: "nowrap" }}>
                       {r.total > 0 ? fmtMoney(r.total) : "—"}
                     </td>
+                    </>}
                     {monthMode && <>
-                      {/* Partial Pay — monto */}
+                      {/* Hrs 1–15 */}
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 600, color: C.text2 }}>{r.q1}</td>
+                      {/* Due 1–15 — click para copiar al input de pago */}
+                      <td onClick={() => r.dueQ1 > 0 && setPartialInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), amount: String(Math.round(r.dueQ1)) } }))}
+                        title="Click to fill payment"
+                        style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
+                          color: r.dueQ1 > 0 ? C.text : C.text3, cursor: r.dueQ1 > 0 ? "pointer" : "default",
+                          textDecoration: r.dueQ1 > 0 ? "underline dotted" : "none", textUnderlineOffset: 3 }}>
+                        {r.dueQ1 > 0 ? fmtMoney(r.dueQ1) : "—"}
+                      </td>
+                      {/* Pay 1–15 — monto */}
                       <td style={{ padding: "0.75rem 0.9rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
                           <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>{sym}</span>
@@ -6434,7 +7359,17 @@ function CoachesView() {
                           </button>
                         </div>
                       </td>
-                      {/* Final Pay — monto */}
+                      {/* Hrs 16–31 */}
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 600, color: C.text2 }}>{r.q2}</td>
+                      {/* Due 16–31 — click para copiar al input de pago */}
+                      <td onClick={() => r.dueQ2 > 0 && setFinalInputs(prev => ({ ...prev, [r.coach]: { ...(prev[r.coach] || {}), amount: String(Math.round(r.dueQ2)) } }))}
+                        title="Click to fill payment"
+                        style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
+                          color: r.dueQ2 > 0 ? C.text : C.text3, cursor: r.dueQ2 > 0 ? "pointer" : "default",
+                          textDecoration: r.dueQ2 > 0 ? "underline dotted" : "none", textUnderlineOffset: 3 }}>
+                        {r.dueQ2 > 0 ? fmtMoney(r.dueQ2) : "—"}
+                      </td>
+                      {/* Pay 16–31 — monto */}
                       <td style={{ padding: "0.75rem 0.9rem" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
                           <span style={{ fontSize: 11, color: C.text3, flexShrink: 0 }}>{sym}</span>
@@ -6473,6 +7408,10 @@ function CoachesView() {
                           </button>
                         </div>
                       </td>
+                      {/* Total mes (incluye IVA si aplica) */}
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 800, color: r.total > 0 ? C.green : C.text3, whiteSpace: "nowrap" }}>
+                        {r.total > 0 ? fmtMoney(r.total) : "—"}
+                      </td>
                       <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap",
                         color: isPaid ? C.green : pending < 0 ? C.amber : "#d95f5f" }}>
                         {r.total > 0 ? (isPaid ? "✓ 0" : fmtMoney(pending)) : "—"}
@@ -6495,18 +7434,32 @@ function CoachesView() {
                   return (
                   <tr style={{ borderTop: `1px solid ${C.border2}`, background: C.surface2 }}>
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 11, fontWeight: 800, color: C.text2, letterSpacing: "0.08em", textTransform: "uppercase", position: "sticky", left: 0, background: C.surface2 }}>Total</td>
+                    {!monthMode && <>
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 900, color: C.text }}>{totalHrs} hrs</td>
                     <td />
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 800, color: C.text, whiteSpace: "nowrap" }}>{tNet > 0 ? fmtMoney(tNet) : "—"}</td>
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 800, color: C.text2, whiteSpace: "nowrap" }}>{tIva > 0 ? fmtMoney(tIva) : "—"}</td>
                     <td style={{ padding: "0.75rem 0.9rem", fontSize: 15, fontWeight: 900, color: C.green, whiteSpace: "nowrap" }}>{tTotal > 0 ? fmtMoney(tTotal) : "—"}</td>
-                    {monthMode && <>
-                      <td /><td /><td /><td />
+                    </>}
+                    {monthMode && (() => {
+                      const tQ1    = rows.reduce((s, r) => s + r.q1, 0);
+                      const tQ2    = rows.reduce((s, r) => s + r.q2, 0);
+                      const tDueQ1 = rows.reduce((s, r) => s + r.dueQ1, 0);
+                      const tDueQ2 = rows.reduce((s, r) => s + r.dueQ2, 0);
+                      return <>
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 900, color: C.text }}>{tQ1}</td>
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 800, color: C.text, whiteSpace: "nowrap" }}>{tDueQ1 > 0 ? fmtMoney(tDueQ1) : "—"}</td>
+                      <td /><td />
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 900, color: C.text }}>{tQ2}</td>
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 13, fontWeight: 800, color: C.text, whiteSpace: "nowrap" }}>{tDueQ2 > 0 ? fmtMoney(tDueQ2) : "—"}</td>
+                      <td /><td />
+                      <td style={{ padding: "0.75rem 0.9rem", fontSize: 15, fontWeight: 900, color: C.green, whiteSpace: "nowrap" }}>{tTotal > 0 ? fmtMoney(tTotal) : "—"}</td>
                       <td style={{ padding: "0.75rem 0.9rem", fontSize: 14, fontWeight: 900, whiteSpace: "nowrap",
                         color: allPaid ? C.green : tPending < 0 ? C.amber : "#d95f5f" }}>
                         {tTotal > 0 ? (allPaid ? "✓ 0" : fmtMoney(tPending)) : "—"}
                       </td>
-                    </>}
+                      </>;
+                    })()}
                   </tr>
                 );})()}
               </tfoot>
@@ -6569,6 +7522,448 @@ function CoachesView() {
         {!loading && !error && monthEvents !== null &&
           PayrollTable({ rows: monthRows, totalHrs: totalMonthHrs, emptyMsg: "No classes this month.", monthMode: true })}
       </>}
+
+      {/* ══ COACH ROSTER ══ */}
+      <div style={{ ...CARD, borderRadius: 14, marginTop: "1.5rem", overflow: "hidden" }}>
+        <div onClick={() => setRosterOpen(o => !o)}
+          style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.9rem 1.1rem", cursor: "pointer" }}>
+          <span style={{ fontSize: 13, color: C.text3, width: 14 }}>{rosterOpen ? "▾" : "▸"}</span>
+          <p style={{ fontSize: 13, fontWeight: 800, color: C.text, letterSpacing: "0.04em" }}>Coach Roster</p>
+          <p style={{ fontSize: 11, color: C.text3, marginLeft: "auto" }}>
+            {rosterRows.filter(r => r.active !== false).length} active
+          </p>
+        </div>
+        {rosterOpen && (
+          <div style={{ borderTop: `1px solid ${C.border}` }}>
+            {rosterRows.map((r, i) => (
+              <div key={r.coach_name} style={{ display: "flex", alignItems: "center", gap: "0.8rem",
+                padding: "0.6rem 1.1rem", borderBottom: `1px solid ${C.border}`,
+                opacity: r.active === false ? 0.45 : 1 }}>
+                <input type="color" value={r.color || "#9e9e9e"}
+                  onChange={e => updateRosterField(r.coach_name, "color", e.target.value)}
+                  title="Coach color"
+                  style={{ width: 26, height: 26, padding: 0, border: "none", borderRadius: 6,
+                    background: "transparent", cursor: "pointer", flexShrink: 0 }} />
+                <p style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 70 }}>{r.coach_name}</p>
+                <p style={{ fontSize: 11, color: C.text3, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.email || `${r.coach_name.toLowerCase()}@dilo.club`}
+                </p>
+                <div onClick={() => updateRosterField(r.coach_name, "active", !(r.active !== false))}
+                  title={r.active !== false ? "Deactivate coach" : "Reactivate coach"}
+                  style={{ width: 30, height: 17, borderRadius: 9, flexShrink: 0,
+                    background: r.active !== false ? C.green : C.surface2,
+                    border: `1px solid ${r.active !== false ? C.green : C.border2}`,
+                    position: "relative", cursor: "pointer", transition: "background 0.18s" }}>
+                  <div style={{ position: "absolute", top: 2, left: r.active !== false ? 14 : 2,
+                    width: 11, height: 11, borderRadius: "50%", transition: "left 0.18s",
+                    background: r.active !== false ? "#fff" : C.text3 }} />
+                </div>
+              </div>
+            ))}
+            {/* Add coach form */}
+            <div style={{ padding: "0.9rem 1.1rem", display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+              <input type="color" value={addForm.color}
+                onChange={e => setAddForm(f => ({ ...f, color: e.target.value }))}
+                title="Coach color"
+                style={{ width: 26, height: 26, padding: 0, border: "none", borderRadius: 6,
+                  background: "transparent", cursor: "pointer", flexShrink: 0 }} />
+              <input placeholder="Name (e.g. Jose)" value={addForm.name}
+                onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                style={{ ...inputStyle, width: 110 }} />
+              <input placeholder="name@dilo.club" value={addForm.email}
+                onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                style={{ ...inputStyle, width: 150 }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <span style={{ fontSize: 11, color: C.text3 }}>{sym}</span>
+                <input type="number" min="0" placeholder="Rate" value={addForm.rate}
+                  onChange={e => setAddForm(f => ({ ...f, rate: e.target.value }))}
+                  style={{ ...inputStyle, width: 64 }} />
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.text3, cursor: "pointer" }}>
+                <input type="checkbox" checked={addForm.iva}
+                  onChange={e => setAddForm(f => ({ ...f, iva: e.target.checked }))} />
+                VAT
+              </label>
+              <button onClick={saveNewCoach} disabled={rosterSaving}
+                style={{ ...okBtnStyle(rosterSaving), padding: "0.35rem 0.8rem" }}>
+                {rosterSaving ? "…" : "+ Add Coach"}
+              </button>
+            </div>
+            <p style={{ fontSize: 10, color: C.text3, padding: "0 1.1rem 0.9rem", lineHeight: 1.5 }}>
+              The coach must already have a Teams account (name@dilo.club) and a Dilo App account.
+              The name must match the email prefix. Deactivating hides a coach from all views without deleting payroll history.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── CASHIER VIEW ───────────────────────────────────────────────
+function CashierView() {
+  const [links,        setLinks]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [createModal,  setCreateModal]  = useState(false);
+  const [copied,       setCopied]       = useState(null);
+  const [form,         setForm]         = useState({ description: "", customerName: "", amount: "", currency: "CRC", notes: "" });
+  const [creating,     setCreating]     = useState(false);
+  const [createError,  setCreateError]  = useState(null);
+
+  // Embedded charge
+  const sdkRef                           = useRef(null);
+  const [chargeModal,  setChargeModal]  = useState(false);
+  const [chargeForm,   setChargeForm]   = useState({ description: "", customerName: "", amount: "", currency: "CRC" });
+  const [chargeStep,   setChargeStep]   = useState("form"); // "form" | "sdk"
+  const [chargeIntent, setChargeIntent] = useState(null);
+  const [charging,     setCharging]     = useState(false);
+  const [chargeError,  setChargeError]  = useState(null);
+  const [chargeDone,   setChargeDone]   = useState(false);
+
+  const loadLinks = async () => {
+    setLoading(true);
+    const { data } = await supabase.from("payment_links").select("*").order("created_at", { ascending: false });
+    setLinks(data || []);
+    setLoading(false);
+  };
+  useEffect(() => { loadLinks(); }, []);
+
+  const createLink = async () => {
+    if (!form.description || !form.amount) return;
+    setCreating(true); setCreateError(null);
+    try {
+      const res  = await fetch(CASHIER_URL, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${ANON_KEY}`, "apikey": ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ description: form.description, amount: parseInt(form.amount), currency: form.currency, customerName: form.customerName || null, notes: form.notes || null }),
+      });
+      const data = await res.json();
+      if (data.error) { setCreateError(data.error); return; }
+      setCreateModal(false);
+      setForm({ description: "", customerName: "", amount: "", currency: "CRC", notes: "" });
+      loadLinks();
+    } catch (e) {
+      setCreateError(e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copyLink = (link) => {
+    navigator.clipboard.writeText(link.onvo_url);
+    setCopied(link.id);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const cancelLink = async (id) => {
+    await supabase.from("payment_links").update({ status: "cancelled" }).eq("id", id);
+    setLinks(prev => prev.map(l => l.id === id ? { ...l, status: "cancelled" } : l));
+  };
+
+  const openChargeModal = () => {
+    setChargeForm({ description: "", customerName: "", amount: "", currency: "CRC" });
+    setChargeStep("form"); setChargeIntent(null); setChargeError(null); setChargeDone(false);
+    setChargeModal(true);
+  };
+
+  const initCharge = async () => {
+    if (!chargeForm.description || !chargeForm.amount) { setChargeError("Description and amount are required."); return; }
+    setCharging(true); setChargeError(null);
+    try {
+      const res  = await fetch(CASHIER_INTENT_URL, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${ANON_KEY}`, "apikey": ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ description: chargeForm.description, amount: parseInt(chargeForm.amount), currency: chargeForm.currency }),
+      });
+      const data = await res.json();
+      if (data.error) { setChargeError(data.error); return; }
+      setChargeIntent(data.id);
+      setChargeStep("sdk");
+    } catch (e) {
+      setChargeError(e.message);
+    } finally {
+      setCharging(false);
+    }
+  };
+
+  // Render ONVO SDK once intent is ready and container is mounted
+  useEffect(() => {
+    if (chargeStep !== "sdk" || !chargeIntent || !sdkRef.current) return;
+    if (!window.onvo) { setChargeError("ONVO SDK not loaded."); return; }
+    sdkRef.current.innerHTML = "";
+    window.onvo.pay({
+      publicKey:       ONVO_PUBLIC_KEY,
+      paymentIntentId: chargeIntent,
+      paymentType:     "one_time",
+      locale:          "es",
+      onSuccess: async () => {
+        await supabase.from("payment_links").insert({
+          description:     chargeForm.description,
+          amount:          parseInt(chargeForm.amount),
+          currency:        chargeForm.currency,
+          customer_name:   chargeForm.customerName || null,
+          onvo_session_id: chargeIntent,
+          status:          "paid",
+          paid_at:         new Date().toISOString(),
+        });
+        setChargeDone(true);
+        loadLinks();
+      },
+      onError: (err) => {
+        setChargeError(typeof err === "string" ? err : (err?.message ?? "Payment failed."));
+      },
+    }).render(sdkRef.current);
+  }, [chargeStep, chargeIntent]);
+
+  const fmtAmt = (amount, currency) =>
+    currency === "USD" ? `$${(amount / 100).toFixed(2)}` : `₡${Number(amount).toLocaleString("es-CR")}`;
+
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString("es-CR", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+  const now        = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-01`;
+  const paidLinks    = links.filter(l => l.status === "paid");
+  const pendingLinks = links.filter(l => l.status === "pending");
+  const paidMonth    = paidLinks.filter(l => l.paid_at >= monthStart);
+  const collCRC = paidMonth.filter(l => l.currency === "CRC").reduce((s, l) => s + l.amount, 0);
+  const collUSD = paidMonth.filter(l => l.currency === "USD").reduce((s, l) => s + l.amount / 100, 0);
+
+  const visible = filterStatus === "pending"  ? pendingLinks
+                : filterStatus === "paid"     ? paidLinks
+                : links.filter(l => l.status !== "cancelled");
+
+  const STATUS_C = { pending: C.amber, paid: C.green, cancelled: C.text3 };
+  const STATUS_L = { pending: "Pending", paid: "Paid", cancelled: "Cancelled" };
+
+  const inputStyle = { width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "0.6rem 0.75rem", fontSize: 13, color: C.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" };
+  const labelStyle = { fontSize: 10, fontWeight: 700, color: C.text3, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.4rem" };
+
+  return (
+    <div style={{ width: "100%", maxWidth: 860 }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+        <div>
+          <p style={{ fontSize: 22, fontWeight: 900, color: C.text, letterSpacing: "-0.03em" }}>Cashier</p>
+          <p style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>Payment links via OnvoyPay</p>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button onClick={openChargeModal}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: C.green, color: "#fff", border: "none", borderRadius: 10, padding: "0.55rem 1rem", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Charge
+          </button>
+          <button onClick={() => setCreateModal(true)}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: C.text, color: C.bg2, border: "none", borderRadius: 10, padding: "0.55rem 1rem", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New link
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: "0.75rem", marginBottom: "1.5rem" }}>
+        {[
+          { label: "Collected CRC", value: `₡${collCRC.toLocaleString("es-CR")}`, sub: "This month" },
+          { label: "Collected USD", value: `$${collUSD.toFixed(2)}`,               sub: "This month" },
+          { label: "Pending",       value: pendingLinks.length, sub: "Awaiting payment", accent: pendingLinks.length > 0 ? C.amber : undefined },
+          { label: "Total paid",    value: paidLinks.length,   sub: "All time",          accent: C.green },
+        ].map((s, i) => (
+          <div key={i} style={{ ...CARD, borderRadius: 14, padding: "1rem 1.25rem" }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text3, marginBottom: "0.4rem" }}>{s.label}</p>
+            <p style={{ fontSize: "clamp(1.4rem,4vw,2rem)", fontWeight: 900, letterSpacing: "-0.03em", color: s.accent || C.text, lineHeight: 1 }}>{s.value}</p>
+            <p style={{ fontSize: 11, color: C.text3, marginTop: 3 }}>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+        {[["all","All"], ["pending","Pending"], ["paid","Paid"]].map(([mode, label]) => {
+          const active = filterStatus === mode;
+          const col    = mode === "pending" ? C.amber : mode === "paid" ? C.green : C.text2;
+          return (
+            <button key={mode} onClick={() => setFilterStatus(mode)}
+              style={{ padding: "0.35rem 0.75rem", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${active ? col : C.border}`, background: active ? `${col}18` : "transparent", color: active ? col : C.text3, transition: "all 0.15s" }}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "3rem" }}>
+          {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.text3, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
+        </div>
+      ) : visible.length === 0 ? (
+        <div style={{ ...CARD, borderRadius: 14, padding: "3rem", textAlign: "center" }}>
+          <p style={{ fontSize: 13, color: C.text3 }}>No payment links yet. Create one to get started.</p>
+        </div>
+      ) : (
+        <div style={{ ...CARD, borderRadius: 14, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                {["Customer / Description", "Amount", "Status", "Created", "Actions"].map((h, i) => (
+                  <th key={i} style={{ padding: "0.55rem 1rem", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: C.text3, textAlign: i === 0 ? "left" : "center", background: C.surface2, whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((link, i) => (
+                <tr key={link.id} style={{ borderBottom: i < visible.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <td style={{ padding: "0.8rem 1rem" }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{link.customer_name || "—"}</p>
+                    <p style={{ fontSize: 11, color: C.text3, marginTop: 1 }}>{link.description}</p>
+                    {link.notes && <p style={{ fontSize: 10, color: C.text3, marginTop: 1, fontStyle: "italic" }}>{link.notes}</p>}
+                  </td>
+                  <td style={{ padding: "0.8rem 1rem", textAlign: "center" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{fmtAmt(link.amount, link.currency)}</span>
+                  </td>
+                  <td style={{ padding: "0.8rem 1rem", textAlign: "center" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 9px", borderRadius: 50, border: `1px solid ${STATUS_C[link.status]}`, color: STATUS_C[link.status], letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                      {STATUS_L[link.status]}
+                    </span>
+                    {link.paid_at && <p style={{ fontSize: 10, color: C.text3, marginTop: 3 }}>{fmtD(link.paid_at)}</p>}
+                  </td>
+                  <td style={{ padding: "0.8rem 1rem", textAlign: "center" }}>
+                    <p style={{ fontSize: 12, color: C.text3 }}>{fmtD(link.created_at)}</p>
+                  </td>
+                  <td style={{ padding: "0.8rem 1rem", textAlign: "center" }}>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+                      {link.onvo_url && link.status === "pending" && (
+                        <button onClick={() => copyLink(link)}
+                          style={{ background: copied === link.id ? `${C.green}18` : C.surface2, border: `1px solid ${copied === link.id ? C.green : C.border}`, borderRadius: 7, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: copied === link.id ? C.green : C.text2, cursor: "pointer", fontFamily: "inherit", transition: "all 0.2s" }}>
+                          {copied === link.id ? "Copied!" : "Copy link"}
+                        </button>
+                      )}
+                      {link.status === "pending" && (
+                        <button onClick={() => cancelLink(link.id)}
+                          style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 7, padding: "3px 10px", fontSize: 11, fontWeight: 700, color: C.text3, cursor: "pointer", fontFamily: "inherit" }}>
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Charge modal — embedded ONVO SDK */}
+      {chargeModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ ...CARD, borderRadius: 18, padding: "1.5rem", width: "100%", maxWidth: 480 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 800, color: C.text }}>Charge</p>
+                {chargeStep === "sdk" && !chargeDone && <p style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{chargeForm.customerName || "Customer"} · {chargeForm.currency} {parseInt(chargeForm.amount).toLocaleString("es-CR")}</p>}
+              </div>
+              <button onClick={() => { setChargeModal(false); setChargeStep("form"); setChargeIntent(null); setChargeDone(false); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.text3, display: "flex", padding: 2 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            {chargeDone ? (
+              <div style={{ textAlign: "center", padding: "2rem 0" }}>
+                <p style={{ fontSize: 32, marginBottom: "0.75rem" }}>✅</p>
+                <p style={{ fontSize: 16, fontWeight: 800, color: C.green }}>Payment successful</p>
+                <p style={{ fontSize: 13, color: C.text3, marginTop: 6 }}>Recorded in Cashier.</p>
+                <button onClick={() => { setChargeModal(false); setChargeStep("form"); setChargeDone(false); }}
+                  style={{ marginTop: "1.5rem", background: C.text, color: C.bg2, border: "none", borderRadius: 10, padding: "0.65rem 1.5rem", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  Done
+                </button>
+              </div>
+            ) : chargeStep === "form" ? (
+              <>
+                <div style={{ marginBottom: "1rem" }}>
+                  <p style={labelStyle}>Description *</p>
+                  <input value={chargeForm.description} onChange={e => setChargeForm(p => ({ ...p, description: e.target.value }))} placeholder="e.g. Mensualidad junio 2026" style={inputStyle} />
+                </div>
+                <div style={{ marginBottom: "1rem" }}>
+                  <p style={labelStyle}>Customer name</p>
+                  <input value={chargeForm.customerName} onChange={e => setChargeForm(p => ({ ...p, customerName: e.target.value }))} placeholder="e.g. Ronald Ibarra" style={inputStyle} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "0.75rem", marginBottom: "1.25rem" }}>
+                  <div>
+                    <p style={labelStyle}>Amount *</p>
+                    <input value={chargeForm.amount} onChange={e => setChargeForm(p => ({ ...p, amount: e.target.value.replace(/\D/g,"") }))} placeholder="50000" inputMode="numeric" style={inputStyle} />
+                  </div>
+                  <div>
+                    <p style={labelStyle}>Currency</p>
+                    <select value={chargeForm.currency} onChange={e => setChargeForm(p => ({ ...p, currency: e.target.value }))} style={inputStyle}>
+                      <option value="CRC">CRC ₡</option>
+                      <option value="USD">USD $</option>
+                    </select>
+                  </div>
+                </div>
+                {chargeError && <p style={{ fontSize: 12, color: C.red, marginBottom: "0.75rem" }}>{chargeError}</p>}
+                <button onClick={initCharge} disabled={charging || !chargeForm.description || !chargeForm.amount}
+                  style={{ width: "100%", background: C.green, color: "#fff", border: "none", borderRadius: 12, padding: "0.8rem", fontSize: 13, fontWeight: 800, cursor: (charging || !chargeForm.description || !chargeForm.amount) ? "not-allowed" : "pointer", opacity: (charging || !chargeForm.description || !chargeForm.amount) ? 0.5 : 1, fontFamily: "inherit" }}>
+                  {charging ? "Preparing…" : "Continue to payment"}
+                </button>
+              </>
+            ) : (
+              <>
+                {chargeError && <p style={{ fontSize: 12, color: C.red, marginBottom: "0.75rem" }}>{chargeError}</p>}
+                <div ref={sdkRef} style={{ minHeight: 200 }} />
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Create modal — defined inline to avoid focus loss on re-render */}
+      {createModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }}>
+          <div style={{ ...CARD, borderRadius: 18, padding: "1.5rem", width: "100%", maxWidth: 440 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <p style={{ fontSize: 15, fontWeight: 800, color: C.text }}>New payment link</p>
+              <button onClick={() => { setCreateModal(false); setCreateError(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.text3, display: "flex", padding: 2 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div style={{ marginBottom: "1rem" }}>
+              <p style={labelStyle}>Description *</p>
+              <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="e.g. Mensualidad junio 2026" style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: "1rem" }}>
+              <p style={labelStyle}>Customer name</p>
+              <input value={form.customerName} onChange={e => setForm(p => ({ ...p, customerName: e.target.value }))} placeholder="e.g. Ronald Ibarra" style={inputStyle} />
+            </div>
+            <div style={{ marginBottom: "1rem" }}>
+              <p style={labelStyle}>Notes</p>
+              <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} placeholder="Internal notes (optional)" style={inputStyle} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 110px", gap: "0.75rem", marginBottom: "1.25rem" }}>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.text3, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.4rem" }}>Amount *</p>
+                <input value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value.replace(/\D/g,"") }))}
+                  placeholder="50000" inputMode="numeric"
+                  style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "0.6rem 0.75rem", fontSize: 13, color: C.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.text3, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.4rem" }}>Currency</p>
+                <select value={form.currency} onChange={e => setForm(p => ({ ...p, currency: e.target.value }))}
+                  style={{ width: "100%", background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 10, padding: "0.6rem 0.75rem", fontSize: 13, color: C.text, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}>
+                  <option value="CRC">CRC ₡</option>
+                  <option value="USD">USD $</option>
+                </select>
+              </div>
+            </div>
+            {createError && <p style={{ fontSize: 12, color: C.red, marginBottom: "0.75rem" }}>{createError}</p>}
+            <button onClick={createLink} disabled={creating || !form.description || !form.amount}
+              style={{ width: "100%", background: C.text, color: C.bg2, border: "none", borderRadius: 12, padding: "0.8rem", fontSize: 13, fontWeight: 800, cursor: (creating || !form.description || !form.amount) ? "not-allowed" : "pointer", opacity: (creating || !form.description || !form.amount) ? 0.5 : 1, fontFamily: "inherit" }}>
+              {creating ? "Creating…" : "Create payment link"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -6578,281 +7973,874 @@ function CoachesView() {
 // Filterable by class subject. Coaches excluded. External students flagged.
 function AttendanceView() {
   const now = new Date();
-  const [year,   setYear]   = useState(now.getFullYear());
-  const [month,  setMonth]  = useState(now.getMonth() + 1);
-  const [view,   setView]   = useState("overview"); // "overview" | "detail"
-  const [selected, setSelected] = useState(null);
 
-  // Overview state
-  const [classes,    setClasses]    = useState([]);
-  const [loadingOv,  setLoadingOv]  = useState(true);
-  const [errorOv,    setErrorOv]    = useState(null);
-
-  // Detail state
-  const [sessions,     setSessions]     = useState([]);
-  const [allStudents,  setAllStudents]  = useState([]);
-  const [loadingDt,    setLoadingDt]    = useState(false);
-
-  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-  const toToken = s => s.trim().split("@")[0].split(/[\s_]/)[0].toLowerCase().replace(/\d/g,"");
-  const getTokenSet = str => new Set((str||"").split(/[,;&\/]/).map(toToken).filter(t=>t.length>=3));
-
-  // ── Load overview: Teams events → class list ──────────────────
-  const loadOverview = async (y, m) => {
-    setLoadingOv(true); setErrorOv(null); setClasses([]);
-    const start = new Date(y, m-1, 1).toISOString();
-    const end   = new Date(y, m, 0, 23, 59, 59).toISOString();
-    try {
-      const res  = await fetch(EDGE_URL, {
-        method:"POST", headers:{ Authorization:"Bearer "+ANON_KEY, apikey:ANON_KEY, "Content-Type":"application/json" },
-        body: JSON.stringify({ source:"teams", startDateTime:start, endDateTime:end }),
-      });
-      const data = await res.json();
-      if (!Array.isArray(data)) throw new Error("Unexpected response");
-
-      const nowTs = new Date();
-      const byClass = {};
-      for (const ev of data) {
-        if (!ev.summary) continue;
-        const evDate = new Date(ev.start);
-        if (evDate > nowTs) continue; // exclude future events
-        if (!byClass[ev.summary]) byClass[ev.summary] = { summary:ev.summary, coach:ev.coach||"Unassigned", count:0, maxStudents:0 };
-        byClass[ev.summary].count++;
-        const cnt = getTokenSet(ev.estudiantes||"").size;
-        byClass[ev.summary].maxStudents = Math.max(byClass[ev.summary].maxStudents, cnt);
-      }
-
-      setClasses(
-        Object.values(byClass)
-          .map(c => ({ ...c, type: c.maxStudents <= 1 ? "Private" : "Group" }))
-          .sort((a,b) => a.summary.localeCompare(b.summary))
-      );
-    } catch(e) { setErrorOv(e.message); }
-    setLoadingOv(false);
+  const getMonday = (d) => {
+    const dt = new Date(d); dt.setHours(12, 0, 0, 0);
+    const dow = dt.getDay();
+    dt.setDate(dt.getDate() + (dow === 0 ? -6 : 1 - dow));
+    return dt.toISOString().split("T")[0];
   };
 
-  // ── Load class detail: attendance per session ─────────────────
-  const loadDetail = async (cls) => {
-    setSelected(cls); setView("detail");
-    setLoadingDt(true); setSessions([]); setAllStudents([]);
-    try {
-      const res  = await fetch(ATTENDANCE_URL, {
-        method:"POST", headers:{ Authorization:"Bearer "+ANON_KEY, apikey:ANON_KEY, "Content-Type":"application/json" },
-        body: JSON.stringify({ source:"class-history", subject:cls.summary, year, month }),
-      });
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        // Debug: log raw session data to verify all attendees are present
-        console.group(`[Attendance] ${cls.summary}`);
-        data.forEach((s, i) => {
-          const d = s.date||s.start||s.startTime||`Session ${i+1}`;
-          console.log(`Session ${i+1} (${d}) — ${s.records?.length||0} records:`);
-          console.table((s.records||[]).map(r => ({ email:r.email, name:r.name, duration_s:r.duration, isExternal:r.isExternal })));
-        });
-        console.groupEnd();
+  const [year,  setYear]  = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [weekStart, setWeekStart] = useState(() => getMonday(now));
+  const [filterMode, setFilterMode] = useState("all"); // "all" | "pending" | "imported" | "omitted"
 
-        const studentMap = {};
-        data.forEach((session, si) => {
-          (session.records||[]).forEach((rec, ri) => {
-            // Robust key: prefer email, fall back to name, then generate unique id
-            const key = rec.email || rec.name || `attendee_${si}_${ri}`;
-            if (!studentMap[key]) studentMap[key] = {
-              email: rec.email || null,
-              name:  rec.name  || rec.email || key,
-            };
-          });
-        });
-        setAllStudents(Object.values(studentMap).sort((a,b) => (a.email||a.name).localeCompare(b.email||b.name)));
-        setSessions(data);
-      }
-    } catch(e) { console.error(e); }
-    setLoadingDt(false);
-  };
+  // Calendar
+  const [calSessions,    setCalSessions]    = useState([]);
+  const [attendedIds,    setAttendedIds]    = useState(new Set());
+  const [omittedIds,     setOmittedIds]     = useState(new Set());
+  const [omittedReasons, setOmittedReasons] = useState({});
+  const [loadingCal,     setLoadingCal]     = useState(true);
 
-  useEffect(() => { loadOverview(year, month); }, []);
+  // Session detail
+  const [detailSession,   setDetailSession]   = useState(null);
+  const [detailAttendees, setDetailAttendees] = useState([]);
+  const [detailCoaches,   setDetailCoaches]   = useState([]);
+  const [loadingDetail,   setLoadingDetail]   = useState(false);
+
+  // Student search
+  const [studentSearch,  setStudentSearch]  = useState("");
+  const [studentResults, setStudentResults] = useState([]);
+  const [loadingSearch,  setLoadingSearch]  = useState(false);
+
+  // Import
+  const fileRef                             = useRef(null);
+  const [importModal,   setImportModal]     = useState(false);
+  const [importData,    setImportData]      = useState(null);
+  const [importSession, setImportSession]   = useState(null);
+  const [matchOptions,  setMatchOptions]    = useState([]);
+  const [importing,     setImporting]       = useState(false);
+  const [importError,   setImportError]     = useState(null);
+
+  // Omit
+  const [omitModal,   setOmitModal]   = useState(false);
+  const [omitSession, setOmitSession] = useState(null);
+  const [omitReason,  setOmitReason]  = useState("");
+  const [omitting,    setOmitting]    = useState(false);
+  const [omitError,   setOmitError]   = useState(null);
+
+  const MONTHS = MONTHS_SHORT;
+
+  const rateColor = r => r >= 80 ? C.green : r >= 50 ? C.amber : C.red;
+
+  // ── Period navigation ─────────────────────────────────────────
+  const pStart = (y, m) => `${y}-${String(m).padStart(2,'0')}-01`;
+  const pEnd   = (y, m) => `${y}-${String(m).padStart(2,'0')}-${new Date(y,m,0).getDate()}`;
 
   const changePeriod = (y, m) => {
-    setYear(y); setMonth(m); setView("overview"); setSelected(null);
-    loadOverview(y, m);
+    const newMonday = getMonday(new Date(y, m - 1, 1));
+    setYear(y); setMonth(m); setDetailSession(null);
+    setWeekStart(newMonday);
+    loadCalendar(y, m);
+  };
+  const prevMonth  = () => { const d = new Date(year, month-2); changePeriod(d.getFullYear(), d.getMonth()+1); };
+  const nextMonth  = () => { const d = new Date(year, month);   if (d > now) return; changePeriod(d.getFullYear(), d.getMonth()+1); };
+  const atCurrent  = year === now.getFullYear() && month === now.getMonth()+1;
+
+  const shiftWeek = (n) => {
+    const d = new Date(weekStart + "T12:00:00");
+    d.setDate(d.getDate() + n * 7);
+    const newStart = d.toISOString().split("T")[0];
+    setWeekStart(newStart);
+    const wY = d.getFullYear(), wM = d.getMonth() + 1;
+    if (wY !== year || wM !== month) { setYear(wY); setMonth(wM); loadCalendar(wY, wM); }
   };
 
+  // ── Load calendar from Supabase ───────────────────────────────
+  const loadCalendar = async (y, m) => {
+    setLoadingCal(true);
+    const start = pStart(y, m);
+    const end   = pEnd(y, m);
+    const { data: sess } = await supabase
+      .from("class_sessions")
+      .select("id, class_title, coach, class_date, class_time")
+      .gte("class_date", start).lte("class_date", end)
+      .order("class_date").order("class_time");
+    const allSessions = sess || [];
+    setCalSessions(allSessions);
+    if (allSessions.length) {
+      const ids = allSessions.map(s => s.id);
+      const [{ data: att }, { data: omit }] = await Promise.all([
+        supabase.from("session_attendance").select("class_session_id").in("class_session_id", ids),
+        supabase.from("session_omissions").select("class_session_id, reason").in("class_session_id", ids),
+      ]);
+      setAttendedIds(new Set((att || []).map(a => a.class_session_id)));
+      setOmittedIds(new Set((omit || []).map(o => o.class_session_id)));
+      setOmittedReasons(Object.fromEntries((omit || []).map(o => [o.class_session_id, o.reason])));
+    } else {
+      setAttendedIds(new Set());
+      setOmittedIds(new Set());
+      setOmittedReasons({});
+    }
+    setLoadingCal(false);
+  };
+
+  // ── Load single session detail ────────────────────────────────
+  const loadSessionDetail = async (session) => {
+    setDetailSession(session);
+    setLoadingDetail(true);
+    const { data } = await supabase
+      .from("session_attendance")
+      .select("student_name, duration_seconds, is_coach, coach_name, join_time, leave_time")
+      .eq("class_session_id", session.id);
+    setDetailAttendees((data || []).filter(a => !a.is_coach));
+    setDetailCoaches((data || []).filter(a =>  a.is_coach));
+    setLoadingDetail(false);
+  };
+
+  useEffect(() => { loadCalendar(year, month); }, []);
+
+  const searchStudent = async (name) => {
+    if (!name || name.length < 2) { setStudentResults([]); return; }
+    setLoadingSearch(true);
+    const ids = calSessions.map(s => s.id);
+    if (!ids.length) { setStudentResults([]); setLoadingSearch(false); return; }
+    const { data } = await supabase
+      .from("session_attendance")
+      .select("student_name, join_time, leave_time, duration_seconds, is_coach, class_session_id")
+      .ilike("student_name", `%${name}%`)
+      .in("class_session_id", ids);
+    const sessMap = Object.fromEntries(calSessions.map(s => [s.id, s]));
+    setStudentResults(
+      (data || [])
+        .map(r => ({ ...r, session: sessMap[r.class_session_id] }))
+        .filter(r => r.session)
+        .sort((a, b) => (a.session.class_date || "").localeCompare(b.session.class_date || ""))
+    );
+    setLoadingSearch(false);
+  };
+
+  useEffect(() => {
+    const t = setTimeout(() => searchStudent(studentSearch), 350);
+    return () => clearTimeout(t);
+  }, [studentSearch, calSessions]);
+
+  // ── CSV helpers ───────────────────────────────────────────────
+  const teamsDate = str => {
+    if (!str) return null;
+    const [datePart] = str.trim().split(/[,\s]/);
+    const [m, d, y]  = (datePart || "").split("/");
+    if (!m || !d || !y) return null;
+    return `${y.length === 2 ? "20"+y : y}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  };
+
+  const parseDurSecs = str => {
+    if (!str) return 0;
+    const mt = str.match(/(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s)?/);
+    return (parseInt(mt?.[1]||0)*3600) + (parseInt(mt?.[2]||0)*60) + parseInt(mt?.[3]||0);
+  };
+
+  const handleFileChange = async e => {
+    const file = e.target.files?.[0]; if (!file) return;
+    e.target.value = "";
+    const text  = await file.text();
+    const lines = text.split(/\r?\n/);
+
+    // Scan first 20 lines to detect delimiter reliably
+    const sample   = lines.slice(0, 20).join("\n");
+    const tabCount = (sample.match(/\t/g) || []).length;
+    const delim    = tabCount > 3 ? "\t" : ",";
+    const rows     = lines.map(l => l.split(delim).map(c => c.replace(/^"|"$/g, "").trim()));
+
+    // Search for class name in any row with "title" or "meeting"
+    const titleRow  = rows.find(r => /meeting.*title|^title/i.test(r[0]));
+    const className = titleRow?.[1] || rows[1]?.[1] || "";
+
+    // Search for meeting date
+    const dateRow  = rows.find(r => /start time|meeting.*date/i.test(r[0]));
+    const meetDate = teamsDate(dateRow?.[1] || "");
+
+    // Must match "2. Participants" section header specifically — not "Attended participants" in Summary
+    const partIdx = rows.findIndex(r =>
+      /^\d+\.\s*participants/i.test(r[0]?.trim() || "")
+    );
+
+    if (partIdx === -1 || !className) {
+      const hint = !className
+        ? `No se encontró el nombre de la clase (fila con "Meeting title:"). Fila 2: "${rows[1]?.join(" | ")}"`
+        : `No se encontró la sección "2. Participants". Revisá el archivo.`;
+      setImportError(`Formato no reconocido — ${hint}`);
+      setImportData(null); setImportModal(true); return;
+    }
+
+    // Skip "2. Participants" header + column-header row; stop at next numbered section (e.g. "3. In-Meeting Activities")
+    const slice   = rows.slice(partIdx + 2);
+    const stopAt  = slice.findIndex(r => /^\d+\./.test(r[0]?.trim() || ""));
+    const rawRows = (stopAt === -1 ? slice : slice.slice(0, stopAt)).filter(r => r[0]?.trim());
+
+    // @dilo.club email = coach/staff; prefer Presenter over Organizer (room account)
+    const isCoachRow = p => /dilo\.club/i.test(p.email || "");
+
+    const participants = rawRows.map(r => ({
+      name: r[0]?.trim(), joinTime: r[1]?.trim(), leaveTime: r[2]?.trim(),
+      duration: r[3]?.trim(), durationSecs: parseDurSecs(r[3]?.trim()),
+      email: r[4]?.trim(), role: r[6]?.trim(),
+    })).filter(p => p.name && !/^name$/i.test(p.name));
+
+    // Pick Presenter @dilo.club first (human coach), fall back to any @dilo.club (room Organizer)
+    const coachRow = participants.find(p => isCoachRow(p) && /presenter/i.test(p.role || ""))
+                  || participants.find(isCoachRow);
+    const students = participants.filter(p => !isCoachRow(p));
+
+    const classKey   = className.split(" - ")[0]; // e.g. "A1"
+    const coachFirst = coachRow?.name?.split(/\s+/)[0] || ""; // e.g. "Gabriela"
+    const sessionSelect = "id, class_title, coach, class_date, class_time";
+
+    // Extract student-specific token from end of class title ("A1 - Your English Class Ronald" → "Ronald")
+    const classWords   = className.trim().split(/\s+/);
+    const studentHint  = classWords[classWords.length - 1] || "";
+    const useStudentHint = studentHint.length > 2 &&
+      !/^(class|english|your|club|meeting|session|inc|sa)$/i.test(studentHint);
+
+    // Evening classes in Costa Rica (UTC-6) may be stored as next-day UTC in Supabase
+    const crDatePlusOne = (() => {
+      const d = new Date(meetDate + "T00:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split("T")[0];
+    })();
+    const dateCandidates = [meetDate, crDatePlusOne];
+
+    const byProximity = (arr) =>
+      [...(arr || [])].sort((a, b) => {
+        // Treat meetDate and crDatePlusOne as equally close (same CR day)
+        const distA = dateCandidates.includes(a.class_date) ? 0 : Math.abs(new Date(a.class_date) - new Date(meetDate));
+        const distB = dateCandidates.includes(b.class_date) ? 0 : Math.abs(new Date(b.class_date) - new Date(meetDate));
+        return distA - distB;
+      });
+
+    // 1. Exact: class + student name + coach + date (studentHint disambiguates multiple classes same level/coach/date)
+    let options = [];
+    if (useStudentHint) {
+      let qb = supabase.from("class_sessions").select(sessionSelect)
+        .ilike("class_title", `%${classKey}%`)
+        .ilike("class_title", `%${studentHint}%`)
+        .in("class_date", dateCandidates);
+      if (coachFirst) qb = qb.ilike("coach", `%${coachFirst}%`);
+      const { data } = await qb.limit(5);
+      options = data || [];
+    }
+
+    // 1b. Class + coach + date (no student hint — for older sessions without student name in title)
+    if (!options.length) {
+      let qb = supabase.from("class_sessions").select(sessionSelect)
+        .ilike("class_title", `%${classKey}%`)
+        .in("class_date", dateCandidates);
+      if (coachFirst) qb = qb.ilike("coach", `%${coachFirst}%`);
+      const { data } = await qb.limit(10);
+      options = data || [];
+    }
+
+    // 1c. Coach + date only — class_title format may differ between Teams and Supabase
+    if (!options.length && coachFirst) {
+      const { data } = await supabase.from("class_sessions")
+        .select(sessionSelect)
+        .ilike("coach", `%${coachFirst}%`)
+        .in("class_date", dateCandidates).limit(10);
+      options = data || [];
+    }
+
+    // 2. Class + student + coach, any date → sort by date proximity
+    if (!options.length && coachFirst && useStudentHint) {
+      let qb = supabase.from("class_sessions").select(sessionSelect)
+        .ilike("class_title", `%${classKey}%`)
+        .ilike("class_title", `%${studentHint}%`)
+        .ilike("coach", `%${coachFirst}%`)
+        .order("class_date", { ascending: false }).limit(20);
+      const { data } = await qb;
+      options = byProximity(data);
+    }
+
+    // 2b. Class + coach, any date → sort by date proximity
+    if (!options.length && coachFirst) {
+      const { data } = await supabase.from("class_sessions")
+        .select(sessionSelect)
+        .ilike("class_title", `%${classKey}%`)
+        .ilike("coach", `%${coachFirst}%`)
+        .order("class_date", { ascending: false }).limit(50);
+      options = byProximity(data);
+    }
+
+    // 3. Class only, any date → sort by date proximity
+    if (!options.length) {
+      const { data } = await supabase.from("class_sessions")
+        .select(sessionSelect)
+        .ilike("class_title", `%${classKey}%`)
+        .order("class_date", { ascending: false }).limit(50);
+      options = byProximity(data);
+    }
+
+    // 4. Sessions within ±7 days of meetDate (last resort, sorted by proximity)
+    if (!options.length) {
+      const rangeStart = (() => { const d = new Date(meetDate+"T00:00:00"); d.setDate(d.getDate()-7); return d.toISOString().split("T")[0]; })();
+      const rangeEnd   = (() => { const d = new Date(meetDate+"T00:00:00"); d.setDate(d.getDate()+2); return d.toISOString().split("T")[0]; })();
+      const { data } = await supabase.from("class_sessions")
+        .select(sessionSelect)
+        .gte("class_date", rangeStart).lte("class_date", rangeEnd)
+        .order("class_date", { ascending: false }).limit(100);
+      options = byProximity(data || []);
+    }
+
+    // 5. Any recent session (absolute last resort)
+    if (!options.length) {
+      const { data } = await supabase.from("class_sessions")
+        .select(sessionSelect).order("class_date", { ascending: false }).limit(50);
+      options = data || [];
+    }
+
+    setImportData({ className, meetDate, coach: coachRow?.name || null, coachParticipant: coachRow || null, students, fileName: file.name });
+    setMatchOptions(options);
+    setImportSession(options[0]?.id || null);
+    setImportError(null);
+    setImportModal(true);
+  };
+
+  const confirmImport = async () => {
+    if (!importSession || (!importData?.students?.length && !importData?.coachParticipant)) return;
+    setImporting(true);
+    await supabase.from("session_attendance").delete().eq("class_session_id", importSession);
+    const records = importData.students.map(s => ({
+      class_session_id: importSession,
+      student_name:     s.name,
+      coach_name:       importData.coach,
+      duration_seconds: s.durationSecs,
+      join_time:        s.joinTime  || null,
+      leave_time:       s.leaveTime || null,
+      is_coach:         false,
+    }));
+    if (importData.coachParticipant) {
+      records.push({
+        class_session_id: importSession,
+        student_name:     importData.coachParticipant.name,
+        coach_name:       importData.coachParticipant.name,
+        duration_seconds: importData.coachParticipant.durationSecs,
+        join_time:        importData.coachParticipant.joinTime  || null,
+        leave_time:       importData.coachParticipant.leaveTime || null,
+        is_coach:         true,
+      });
+    }
+    const { error } = await supabase.from("session_attendance").insert(records);
+    setImporting(false);
+    if (error) { setImportError(error.message); return; }
+    // Optimistic update — move session to imported immediately
+    setAttendedIds(prev => new Set([...prev, importSession]));
+    setImportModal(false); setImportData(null);
+    loadCalendar(year, month);
+    if (detailSession) loadSessionDetail(detailSession);
+  };
+
+  // ── Omit session ─────────────────────────────────────────────
+  const confirmOmit = async () => {
+    if (!omitSession) return;
+    setOmitting(true);
+    const { error } = await supabase.from("session_omissions").upsert(
+      { class_session_id: omitSession.id, reason: omitReason.trim() || null },
+      { onConflict: "class_session_id" }
+    );
+    setOmitting(false);
+    if (error) { setOmitError(error.message); return; }
+    setOmittedIds(prev => new Set([...prev, omitSession.id]));
+    setOmittedReasons(prev => ({ ...prev, [omitSession.id]: omitReason.trim() || null }));
+    setOmitModal(false); setOmitSession(null); setOmitReason(""); setOmitError(null);
+  };
+
+  const removeOmit = async (sessionId) => {
+    await supabase.from("session_omissions").delete().eq("class_session_id", sessionId);
+    setOmittedIds(prev => { const n = new Set(prev); n.delete(sessionId); return n; });
+    setOmittedReasons(prev => { const n = { ...prev }; delete n[sessionId]; return n; });
+  };
+
+  // ── CSV export (single session) ──────────────────────────────
+  const exportCSV = () => {
+    if (!detailSession) return;
+    const rows = [["Clase","Fecha","Coach","Estudiante","Entrada","Salida","Duración (min)","Rol"].join(",")];
+    for (const c of detailCoaches)
+      rows.push([`"${detailSession.class_title}"`, detailSession.class_date, `"${detailSession.coach}"`, `"${c.student_name}"`, c.join_time||"", c.leave_time||"", Math.round((c.duration_seconds||0)/60), "Coach"].join(","));
+    for (const a of detailAttendees)
+      rows.push([`"${detailSession.class_title}"`, detailSession.class_date, `"${detailSession.coach}"`, `"${a.student_name}"`, a.join_time||"", a.leave_time||"", Math.round((a.duration_seconds||0)/60), "Estudiante"].join(","));
+    const el = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob(["﻿"+rows.join("\n")], { type:"text/csv;charset=utf-8;" })),
+      download: `asistencia_${detailSession.class_title}_${detailSession.class_date}.csv`,
+    });
+    el.click(); URL.revokeObjectURL(el.href);
+  };
+
+  // ── Shared components ────────────────────────────────────────
   const Dots = () => (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, padding:"3rem" }}>
       {[0,1,2].map(i=><div key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.text3, animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite` }}/>)}
     </div>
   );
 
-  const typeBadge = (type) => ({
-    fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:50,
-    letterSpacing:"0.08em", textTransform:"uppercase", flexShrink:0,
-    background: type==="Private" ? "rgba(202,154,4,0.12)" : "rgba(109,181,138,0.12)",
-    color:      type==="Private" ? C.amber : C.green,
-    border:    `1px solid ${type==="Private" ? C.amber+"44" : C.green+"44"}`,
-  });
-
-  // ── Period selector (shared) ──────────────────────────────────
-  const PeriodBar = () => (
-    <div style={{ display:"flex", gap:"0.5rem", alignItems:"center", marginBottom:"1.5rem" }}>
-      <select value={month} onChange={e=>changePeriod(year,+e.target.value)} style={SEL()}>
-        {MONTHS.map((lbl,i)=><option key={i} value={i+1}>{lbl}</option>)}
-      </select>
-      <select value={year} onChange={e=>changePeriod(+e.target.value,month)} style={SEL()}>
-        {[2024,2025,2026].map(y=><option key={y} value={y}>{y}</option>)}
-      </select>
+  const NavBar = ({ right }) => (
+    <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.75rem" }}>
+      <button onClick={prevMonth} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:"6px 8px", borderRadius:8, display:"flex", alignItems:"center" }}
+        onMouseEnter={e=>e.currentTarget.style.color=C.text} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span style={{ fontSize:15, fontWeight:700, color:C.text, minWidth:130, textAlign:"center", letterSpacing:"-0.02em" }}>{MONTHS[month-1]} {year}</span>
+      <button onClick={nextMonth} disabled={atCurrent}
+        style={{ background:"none", border:"none", cursor:atCurrent?"default":"pointer", color:atCurrent?C.border:C.text3, padding:"6px 8px", borderRadius:8, display:"flex", alignItems:"center" }}
+        onMouseEnter={e=>{ if(!atCurrent) e.currentTarget.style.color=C.text; }}
+        onMouseLeave={e=>e.currentTarget.style.color=atCurrent?C.border:C.text3}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      {right && <div style={{ marginLeft:"auto" }}>{right}</div>}
     </div>
   );
 
-  // ── DETAIL VIEW ───────────────────────────────────────────────
-  if (view==="detail" && selected) {
-    const recKey = (rec, si, ri) => rec.email || rec.name || `attendee_${si}_${ri}`;
-    const stuKey = (s) => s.email || s.name;
+  const ImportBtn = ({ label = "Import session" }) => (
+    <button onClick={()=>fileRef.current?.click()}
+      style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:"0.5rem 0.85rem", fontSize:12, fontWeight:700, color:C.text2, cursor:"pointer", display:"flex", alignItems:"center", gap:6, WebkitTapHighlightColor:"transparent" }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      {label}
+    </button>
+  );
 
-    const getSessionMap = (session, si) => {
-      const map = {};
-      (session.records||[]).forEach((rec, ri) => {
-        map[recKey(rec, si, ri)] = Math.round(rec.duration/60);
-      });
-      return map;
-    };
-    const totals  = {}; const attended = {};
-    for (const s of allStudents) { totals[stuKey(s)]=0; attended[stuKey(s)]=0; }
-    for (const session of sessions) {
-      const smap = getSessionMap(session, sessions.indexOf(session));
-      for (const s of allStudents) {
-        const key = stuKey(s);
-        if (smap[key]!==undefined) { totals[key]+=smap[key]; attended[key]++; }
+  // ── Import modal ──────────────────────────────────────────────
+  const ImportModal = () => (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.72)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+      <div style={{ background:C.bg2, border:`1px solid ${C.border}`, borderRadius:20, padding:"1.5rem", width:"100%", maxWidth:460, maxHeight:"85vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
+          <h3 style={{ fontSize:16, fontWeight:800, color:C.text }}>Import session</h3>
+          <button onClick={()=>{ setImportModal(false); setImportData(null); }} style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:4, display:"flex" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        {!importData ? (
+          <p style={{ fontSize:13, color:C.red, background:"rgba(194,0,0,0.08)", borderRadius:10, padding:"0.75rem 1rem" }}>{importError}</p>
+        ) : (<>
+          {/* Detected */}
+          <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"0.85rem 1rem", marginBottom:"1rem" }}>
+            <p style={{ fontSize:10, color:C.text3, marginBottom:3, textTransform:"uppercase", letterSpacing:"0.06em", fontWeight:700 }}>Clase detectada</p>
+            <p style={{ fontSize:14, fontWeight:700, color:C.text }}>{importData.className}</p>
+            {importData.meetDate && <p style={{ fontSize:11, color:C.text3, marginTop:2 }}>{importData.meetDate}</p>}
+            {importData.coach    && <p style={{ fontSize:11, color:C.text3, marginTop:1 }}>Coach: <span style={{ color:C.text2 }}>{importData.coach}</span></p>}
+          </div>
+
+          {/* Session match */}
+          <div style={{ marginBottom:"1rem" }}>
+            <p style={{ fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:6 }}>Sesión en Supabase</p>
+            {matchOptions.length === 0
+              ? <p style={{ fontSize:12, color:C.amber, background:"rgba(202,154,4,0.08)", borderRadius:8, padding:"0.6rem 0.75rem" }}>No se encontró una sesión coincidente en class_sessions.</p>
+              : <>
+                  <select value={importSession||""} onChange={e=>setImportSession(e.target.value)} style={{ ...SEL(), width:"100%" }}>
+                    {matchOptions.map(s=><option key={s.id} value={s.id}>{s.class_date} · {s.class_title} · {s.coach}</option>)}
+                  </select>
+                  {importSession && matchOptions.find(o=>o.id===importSession)?.class_date !== importData.meetDate && (
+                    <p style={{ fontSize:11, color:C.amber, marginTop:5 }}>
+                      ⚠ Fecha del archivo: {importData.meetDate} — no coincide con la sesión seleccionada. Seleccioná la correcta.
+                    </p>
+                  )}
+                </>
+            }
+          </div>
+
+          {/* Coach + Students */}
+          <div style={{ marginBottom:"1.25rem" }}>
+            <p style={{ fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:6 }}>
+              Asistentes ({importData.students.length + (importData.coachParticipant ? 1 : 0)})
+            </p>
+            <div style={{ display:"flex", flexDirection:"column", gap:4, maxHeight:220, overflowY:"auto" }}>
+              {importData.coachParticipant && (
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:"rgba(99,102,241,0.08)", border:`1px solid rgba(99,102,241,0.2)`, borderRadius:8, padding:"0.5rem 0.75rem" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ fontSize:10, fontWeight:800, color:"#818cf8", background:"rgba(99,102,241,0.15)", borderRadius:4, padding:"1px 5px", letterSpacing:"0.04em" }}>COACH</span>
+                    <p style={{ fontSize:12, color:C.text, fontWeight:600 }}>{importData.coachParticipant.name}</p>
+                  </div>
+                  <span style={{ fontSize:11, color:"#818cf8", fontWeight:700 }}>{Math.round(importData.coachParticipant.durationSecs/60)}m</span>
+                </div>
+              )}
+              {importData.students.map((s,i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:C.surface, borderRadius:8, padding:"0.5rem 0.75rem" }}>
+                  <p style={{ fontSize:12, color:C.text, fontWeight:600 }}>{s.name}</p>
+                  <span style={{ fontSize:11, color:C.green, fontWeight:700 }}>{Math.round(s.durationSecs/60)}m</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {importError && <p style={{ fontSize:12, color:C.red, marginBottom:"0.75rem" }}>{importError}</p>}
+
+          <button onClick={confirmImport} disabled={!importSession || importing}
+            style={{ width:"100%", background:C.text, color:C.bg2, border:"none", borderRadius:12, padding:"0.8rem", fontSize:13, fontWeight:800, cursor:(!importSession||importing)?"not-allowed":"pointer", opacity:(!importSession||importing)?0.5:1, fontFamily:"inherit" }}>
+            {importing ? "Importing…" : (() => {
+              const n = importData.students.length;
+              const hasCoach = !!importData.coachParticipant;
+              if (hasCoach && n === 0) return "Import coach — no-show";
+              const parts = [];
+              if (hasCoach) parts.push("coach");
+              if (n > 0) parts.push(`${n} student${n === 1 ? "" : "s"}`);
+              return `Import ${parts.join(" + ")}`;
+            })()}
+          </button>
+        </>)}
+      </div>
+    </div>
+  );
+
+  // ── Shared hidden file input (always mounted) ─────────────────
+  const FileInput = () => (
+    <input ref={fileRef} type="file" accept=".csv,.txt,.xls,.xlsx" style={{ display:"none" }} onChange={handleFileChange} />
+  );
+
+  // ── Derived: pending = has prior attended sibling this month ─────
+  const priorAttended = new Set();
+  {
+    const byTitle = {};
+    for (const s of calSessions) {
+      const k = s.class_title || s.id;
+      (byTitle[k] = byTitle[k] || []).push(s);
+    }
+    for (const arr of Object.values(byTitle)) {
+      arr.sort((a, b) => a.class_date.localeCompare(b.class_date));
+      let seen = false;
+      for (const s of arr) {
+        if (seen && !attendedIds.has(s.id)) priorAttended.add(s.id);
+        if (attendedIds.has(s.id)) seen = true;
       }
     }
-    const dateOf = session => {
-      const raw = session.date||session.start||session.startTime||null;
-      if (!raw) return null;
-      const d = new Date(raw);
-      return isNaN(d) ? null : d;
-    };
+  }
+
+  const fmtTime = t => {
+    if (!t) return "—";
+    const m = t.match(/(\d+:\d+):\d+\s*(AM|PM)/i);
+    return m ? `${m[1]} ${m[2].toUpperCase()}` : t;
+  };
+  const fmtMins = secs => {
+    const m = Math.round((secs||0)/60);
+    return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+  };
+  const fmtDate = d => new Date(d + "T12:00:00").toLocaleDateString("es-CR", { weekday:"short", month:"short", day:"numeric" });
+
+  // ── SESSION DETAIL VIEW ───────────────────────────────────────
+  if (detailSession) {
+    const fmtDateLong = d => new Date(d + "T12:00:00").toLocaleDateString("es-CR", { weekday:"long", month:"long", day:"numeric" });
+    const classHistory = [...calSessions]
+      .filter(s => s.class_title === detailSession.class_title)
+      .sort((a, b) => a.class_date.localeCompare(b.class_date));
+    const histPrior = new Set();
+    { let seen = false;
+      for (const s of classHistory) {
+        if (seen && !attendedIds.has(s.id)) histPrior.add(s.id);
+        if (attendedIds.has(s.id)) seen = true;
+      }
+    }
+    const ROW_STYLE = { display:"grid", gridTemplateColumns:"1fr 90px 90px 80px", gap:"0.5rem", alignItems:"center", padding:"0.6rem 1rem", borderBottom:`1px solid ${C.border}` };
+    const HDR_STYLE = { fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase" };
 
     return (
-      <div style={{ width:"100%", maxWidth:900 }}>
-        <button onClick={()=>setView("overview")}
-          style={{ display:"flex", alignItems:"center", gap:"0.4rem", background:"none", border:"none", cursor:"pointer", color:C.text3, fontSize:12, fontWeight:600, letterSpacing:"0.06em", padding:"0 0 1.25rem 0", fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
-          onMouseEnter={e=>e.currentTarget.style.color=C.text2} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-          Attendance
-        </button>
+      <div style={{ width:"100%", maxWidth:860 }}>
+        <FileInput />
+        {importModal && <ImportModal />}
 
-        <PeriodBar />
-
-        <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", flexWrap:"wrap", marginBottom:"0.4rem" }}>
-          <h2 style={{ fontSize:"clamp(1.1rem,3vw,1.4rem)", fontWeight:900, letterSpacing:"-0.02em", color:C.text }}>{selected.summary}</h2>
-          <span style={typeBadge(selected.type)}>{selected.type}</span>
+        {/* Back + actions */}
+        <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", marginBottom:"1.5rem", flexWrap:"wrap" }}>
+          <button onClick={() => setDetailSession(null)}
+            style={{ display:"flex", alignItems:"center", gap:4, background:"none", border:"none", cursor:"pointer", color:C.text3, fontSize:12, fontWeight:600, padding:0, fontFamily:"inherit", WebkitTapHighlightColor:"transparent" }}
+            onMouseEnter={e=>e.currentTarget.style.color=C.text2} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+            {MONTHS[month-1]} {year}
+          </button>
+          <span style={{ color:C.border2, userSelect:"none" }}>·</span>
+          <ImportBtn label="Importar" />
+          {(detailAttendees.length > 0 || detailCoaches.length > 0) && (
+            <button onClick={exportCSV}
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:8, padding:"0.4rem 0.75rem", fontSize:11, fontWeight:700, color:C.text3, cursor:"pointer", fontFamily:"inherit" }}>
+              CSV
+            </button>
+          )}
         </div>
-        <p style={{ fontSize:12, color:C.text3, marginBottom:"1.5rem" }}>
-          {MONTHS[month-1]} {year} · <span style={{ color:C.text2, fontWeight:600 }}>{selected.coach}</span> · {sessions.length} sessions
-        </p>
 
-        {loadingDt ? <Dots /> : sessions.length===0 ? (
-          <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center" }}>
-            <p style={{ fontSize:13, color:C.text3 }}>No attendance data for this period.</p>
+        {/* Session header */}
+        <div style={{ ...CARD, borderRadius:14, padding:"1rem 1.25rem", marginBottom:"1rem" }}>
+          <p style={{ fontSize:17, fontWeight:800, color:C.text, marginBottom:3 }}>{detailSession.class_title}</p>
+          <p style={{ fontSize:12, color:C.text3 }}>{fmtDateLong(detailSession.class_date)} · {detailSession.class_time}</p>
+          <p style={{ fontSize:12, color:C.text3, marginTop:2 }}>{detailSession.coach}</p>
+        </div>
+
+        {/* Attendance table */}
+        {loadingDetail ? <Dots /> : (detailAttendees.length === 0 && detailCoaches.length === 0) ? (
+          <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center", marginBottom:"1rem" }}>
+            <p style={{ fontSize:13, color:C.text3 }}>Sin datos de asistencia para esta sesión.</p>
           </div>
         ) : (
-          <div style={{ overflowX:"auto", WebkitOverflowScrolling:"touch", borderRadius:12, border:`1px solid ${C.border}` }}>
-            <table style={{ borderCollapse:"collapse", width:"100%", minWidth: 130 + 170*allStudents.length }}>
-              <thead>
-                <tr style={{ background:C.surface2 }}>
-                  <th style={{ position:"sticky", left:0, zIndex:2, background:C.surface2, width:130, minWidth:130, padding:"0.65rem 0.85rem", textAlign:"left", fontSize:10, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", color:C.text3, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border2}` }}>
-                    Session
-                  </th>
-                  {allStudents.map(s=>{
-                    const key   = stuKey(s);
-                    const label = s.email || s.name;
-                    return (
-                      <th key={key} title={label} style={{ width:170, minWidth:170, padding:"0.65rem 0.75rem", textAlign:"center", fontSize:10, fontWeight:700, color:C.text2, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}`, overflow:"hidden", textOverflow:"ellipsis", maxWidth:170 }}>
-                        <div style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:155 }}>{label}</div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((session, si)=>{
-                  const smap  = getSessionMap(session, si);
-                  const d     = dateOf(session);
-                  const label = d ? d.toLocaleDateString("en",{month:"short",day:"numeric",weekday:"short"}) : `Session ${si+1}`;
-                  const rowBg    = si%2===0 ? "transparent" : "rgba(240,236,224,0.02)";
-                  const stickyBg = si%2===0 ? C.bg2 : "rgb(17,15,12)";
-                  return (
-                    <tr key={si} style={{ background:rowBg }}>
-                      <td style={{ position:"sticky", left:0, zIndex:1, background:stickyBg, padding:"0.6rem 0.85rem", fontSize:11, fontWeight:600, color:C.text3, borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border2}`, whiteSpace:"nowrap" }}>
-                        {label}
-                      </td>
-                      {allStudents.map(s=>{
-                        const key  = stuKey(s);
-                        const mins = smap[key];
-                        return (
-                          <td key={key} style={{ padding:"0.6rem 0.75rem", textAlign:"center", borderBottom:`1px solid ${C.border}`, borderRight:`1px solid ${C.border}` }}>
-                            {mins===undefined
-                              ? <span style={{ fontSize:10, fontWeight:700, color:C.red, letterSpacing:"0.06em", textTransform:"uppercase" }}>No Show</span>
-                              : <span style={{ fontSize:12, fontWeight:600, color:C.text }}>{mins} min</span>
-                            }
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-                {/* Total row */}
-                <tr style={{ background:"rgba(240,236,224,0.04)" }}>
-                  <td style={{ position:"sticky", left:0, zIndex:1, background:"rgb(20,18,14)", padding:"0.75rem 0.85rem", fontSize:10, fontWeight:800, color:C.text2, letterSpacing:"0.08em", textTransform:"uppercase", borderTop:`2px solid ${C.border2}`, borderRight:`1px solid ${C.border2}`, whiteSpace:"nowrap" }}>
-                    Total
-                  </td>
-                  {allStudents.map(s=>{
-                    const key = stuKey(s);
-                    return (
-                      <td key={key} style={{ padding:"0.75rem", textAlign:"center", borderTop:`2px solid ${C.border2}`, borderRight:`1px solid ${C.border}` }}>
-                        <p style={{ fontSize:13, fontWeight:800, color:C.text, marginBottom:2 }}>{totals[key]} min</p>
-                        <p style={{ fontSize:10, color:C.text3 }}>{attended[key]}/{sessions.length} ses</p>
-                      </td>
-                    );
-                  })}
-                </tr>
-              </tbody>
-            </table>
+          <div style={{ ...CARD, borderRadius:14, overflow:"hidden", marginBottom:"1rem" }}>
+            {/* Table header */}
+            <div style={{ ...ROW_STYLE, background:C.surface2, borderBottom:`1px solid ${C.border2}` }}>
+              <span style={HDR_STYLE}>Participante</span>
+              <span style={{ ...HDR_STYLE, textAlign:"center" }}>Entrada</span>
+              <span style={{ ...HDR_STYLE, textAlign:"center" }}>Salida</span>
+              <span style={{ ...HDR_STYLE, textAlign:"right" }}>Duración</span>
+            </div>
+            {detailCoaches.map(c => (
+              <div key={c.student_name} style={{ ...ROW_STYLE, background:"rgba(99,102,241,0.06)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:7, minWidth:0 }}>
+                  <span style={{ fontSize:9, fontWeight:800, color:"#818cf8", background:"rgba(99,102,241,0.15)", borderRadius:4, padding:"1px 5px", flexShrink:0 }}>COACH</span>
+                  <p style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.student_name}</p>
+                </div>
+                <p style={{ fontSize:12, color:"#818cf8", textAlign:"center" }}>{fmtTime(c.join_time)}</p>
+                <p style={{ fontSize:12, color:"#818cf8", textAlign:"center" }}>{fmtTime(c.leave_time)}</p>
+                <p style={{ fontSize:13, fontWeight:700, color:"#818cf8", textAlign:"right" }}>{fmtMins(c.duration_seconds)}</p>
+              </div>
+            ))}
+            {detailAttendees.map(a => (
+              <div key={a.student_name} style={ROW_STYLE}>
+                <p style={{ fontSize:13, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.student_name}</p>
+                <p style={{ fontSize:12, color:C.text3, textAlign:"center" }}>{fmtTime(a.join_time)}</p>
+                <p style={{ fontSize:12, color:C.text3, textAlign:"center" }}>{fmtTime(a.leave_time)}</p>
+                <p style={{ fontSize:13, fontWeight:700, color:C.green, textAlign:"right" }}>{fmtMins(a.duration_seconds)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Monthly history for this class */}
+        {classHistory.length > 1 && (
+          <div style={{ ...CARD, borderRadius:14, overflow:"hidden" }}>
+            <div style={{ padding:"0.55rem 1rem", borderBottom:`1px solid ${C.border}` }}>
+              <p style={{ fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase" }}>Historial del mes — {detailSession.class_title}</p>
+            </div>
+            {classHistory.map(s => {
+              const isActive = s.id === detailSession.id;
+              const hasAtt   = attendedIds.has(s.id);
+              const hasPrior = histPrior.has(s.id);
+              return (
+                <div key={s.id} style={{ display:"flex", alignItems:"center", gap:"0.75rem", padding:"0.6rem 1rem", borderBottom:`1px solid ${C.border}`, background: isActive ? "rgba(255,255,255,0.04)" : "transparent" }}>
+                  <p style={{ fontSize:12, fontWeight: isActive ? 700 : 400, color: isActive ? C.text : C.text2, flex:1 }}>{fmtDate(s.class_date)} · {s.class_time}</p>
+                  {hasAtt
+                    ? <span style={{ fontSize:11, fontWeight:700, color:C.green }}>✓ Importado</span>
+                    : hasPrior
+                      ? <span style={{ fontSize:11, fontWeight:700, color:C.amber }}>⚠ Pendiente</span>
+                      : <span style={{ fontSize:11, color:C.text3 }}>Sin datos</span>}
+                  {hasAtt && !isActive && (
+                    <button onClick={() => loadSessionDetail(s)}
+                      style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:6, padding:"2px 8px", fontSize:10, fontWeight:700, color:C.text3, cursor:"pointer", fontFamily:"inherit" }}>
+                      Ver
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
     );
   }
 
-  // ── OVERVIEW ─────────────────────────────────────────────────
+  // ── LIST VIEW ─────────────────────────────────────────────────
+  const weekEnd = (() => {
+    const d = new Date(weekStart + "T12:00:00");
+    d.setDate(d.getDate() + 6);
+    return d.toISOString().split("T")[0];
+  })();
+
+  const weekLabel = (() => {
+    const s = new Date(weekStart + "T12:00:00");
+    const e = new Date(weekEnd   + "T12:00:00");
+    const sf = s.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+    const ef = s.getMonth() === e.getMonth()
+      ? e.getDate()
+      : e.toLocaleDateString("en-US", { month:"short", day:"numeric" });
+    return `${sf} – ${ef}`;
+  })();
+
+  const weekSessions = calSessions
+    .filter(s => s.class_date >= weekStart && s.class_date <= weekEnd)
+    .sort((a, b) => a.class_date.localeCompare(b.class_date) || (a.class_time||"").localeCompare(b.class_time||""));
+
+  const pendingAll  = weekSessions.filter(s => !attendedIds.has(s.id) && !omittedIds.has(s.id));
+  const importedAll = weekSessions.filter(s =>  attendedIds.has(s.id));
+  const omittedAll  = weekSessions.filter(s =>  omittedIds.has(s.id));
+
+  const visibleSessions = filterMode === "pending"  ? pendingAll
+                        : filterMode === "imported" ? importedAll
+                        : filterMode === "omitted"  ? omittedAll
+                        : weekSessions;
+
+  const FilterBtn = ({ mode, label, count, color }) => {
+    const active = filterMode === mode;
+    return (
+      <button onClick={() => setFilterMode(active ? "all" : mode)}
+        style={{ display:"flex", alignItems:"center", gap:5, padding:"0.35rem 0.75rem", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", border:`1px solid ${active ? color : C.border}`, background: active ? `${color}18` : "transparent", color: active ? color : C.text3, transition:"all 0.15s" }}>
+        {label}
+        <span style={{ background: active ? color : C.surface2, color: active ? C.bg2 : C.text3, borderRadius:10, padding:"0 5px", fontSize:10, fontWeight:800, minWidth:18, textAlign:"center" }}>{count}</span>
+      </button>
+    );
+  };
+
+  const SessionRow = ({ s }) => {
+    const attended = attendedIds.has(s.id);
+    const omitted  = omittedIds.has(s.id);
+    const reason   = omittedReasons[s.id];
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", padding:"0.7rem 1rem", borderBottom:`1px solid ${C.border}`, cursor: attended ? "pointer" : "default" }}
+        onClick={() => attended && loadSessionDetail(s)}
+        onMouseEnter={e=>{ if(attended) e.currentTarget.style.background="rgba(255,255,255,0.03)"; }}
+        onMouseLeave={e=>{ e.currentTarget.style.background="transparent"; }}>
+        <span style={{ fontSize:11, fontWeight:700, color: attended ? C.green : omitted ? C.text3 : C.amber, flexShrink:0, width:14, textAlign:"center" }}>
+          {attended ? "✓" : omitted ? "–" : "⚠"}
+        </span>
+        <div style={{ flex:1, minWidth:0 }}>
+          <p style={{ fontSize:13, fontWeight:600, color: omitted ? C.text3 : C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.class_title || "Untitled"}</p>
+          <p style={{ fontSize:11, color:C.text3, marginTop:1 }}>{fmtDate(s.class_date)} · {s.class_time} · {s.coach}</p>
+          {omitted && reason && <p style={{ fontSize:11, color:C.text3, marginTop:2, fontStyle:"italic" }}>"{reason}"</p>}
+        </div>
+        {attended ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+        ) : omitted ? (
+          <button onClick={e=>{ e.stopPropagation(); removeOmit(s.id); }}
+            style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:"3px 10px", fontSize:11, fontWeight:700, color:C.text3, cursor:"pointer", fontFamily:"inherit", flexShrink:0 }}>
+            Restore
+          </button>
+        ) : (
+          <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+            <button onClick={e=>{ e.stopPropagation(); setOmitSession(s); setOmitReason(""); setOmitError(null); setOmitModal(true); }}
+              style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:"3px 10px", fontSize:11, fontWeight:700, color:C.text3, cursor:"pointer", fontFamily:"inherit" }}>
+              Omit
+            </button>
+            <button onClick={e=>{ e.stopPropagation(); fileRef.current?.click(); }}
+              style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:7, padding:"3px 10px", fontSize:11, fontWeight:700, color:C.text2, cursor:"pointer", fontFamily:"inherit" }}>
+              Import
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div style={{ width:"100%", maxWidth:720 }}>
-      <PeriodBar />
+      <FileInput />
+      {importModal && <ImportModal />}
+      {omitModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center", padding:"1rem" }}>
+          <div style={{ ...CARD, borderRadius:18, padding:"1.5rem", width:"100%", maxWidth:440 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"1.25rem" }}>
+              <p style={{ fontSize:15, fontWeight:800, color:C.text }}>Omit session</p>
+              <button onClick={() => { setOmitModal(false); setOmitSession(null); setOmitReason(""); setOmitError(null); }}
+                style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, display:"flex", padding:2 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            {omitSession && (
+              <div style={{ background:C.surface2, borderRadius:10, padding:"0.75rem 1rem", marginBottom:"1.25rem" }}>
+                <p style={{ fontSize:13, fontWeight:700, color:C.text }}>{omitSession.class_title || "Untitled"}</p>
+                <p style={{ fontSize:11, color:C.text3, marginTop:2 }}>{fmtDate(omitSession.class_date)} · {omitSession.class_time} · {omitSession.coach}</p>
+              </div>
+            )}
+            <p style={{ fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"0.5rem" }}>Reason (optional)</p>
+            <textarea value={omitReason} onChange={e => setOmitReason(e.target.value)}
+              placeholder="e.g. Student cancelled, coach sick, national holiday..."
+              rows={3}
+              style={{ width:"100%", background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:"0.65rem 0.75rem", fontSize:13, color:C.text, fontFamily:"inherit", outline:"none", resize:"vertical", boxSizing:"border-box" }} />
+            {omitError && <p style={{ fontSize:12, color:C.red, marginTop:"0.5rem" }}>{omitError}</p>}
+            <button onClick={confirmOmit} disabled={omitting}
+              style={{ width:"100%", background:C.text, color:C.bg2, border:"none", borderRadius:12, padding:"0.8rem", fontSize:13, fontWeight:800, cursor:omitting?"not-allowed":"pointer", opacity:omitting?0.5:1, fontFamily:"inherit", marginTop:"1rem" }}>
+              {omitting ? "Saving…" : "Omit session"}
+            </button>
+          </div>
+        </div>
+      )}
+      <NavBar right={<ImportBtn />} />
 
-      {loadingOv ? <Dots /> : errorOv ? (
-        <div style={{ background:"rgba(194,0,0,0.08)", border:"1px solid rgba(194,0,0,0.2)", borderRadius:12, padding:"1rem 1.25rem", color:C.red, fontSize:13 }}>{errorOv}</div>
-      ) : classes.length===0 ? (
-        <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center" }}>
-          <p style={{ fontSize:13, color:C.text3 }}>No classes found for this period.</p>
+      {/* Week nav + filter buttons */}
+      <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.25rem", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:2, background:C.surface, border:`1px solid ${C.border}`, borderRadius:9, padding:"2px" }}>
+          <button onClick={()=>shiftWeek(-1)}
+            style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:"4px 8px", borderRadius:7, display:"flex", alignItems:"center" }}
+            onMouseEnter={e=>e.currentTarget.style.color=C.text} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span style={{ fontSize:12, fontWeight:700, color:C.text, padding:"0 4px", minWidth:110, textAlign:"center" }}>{weekLabel}</span>
+          <button onClick={()=>shiftWeek(1)}
+            style={{ background:"none", border:"none", cursor:"pointer", color:C.text3, padding:"4px 8px", borderRadius:7, display:"flex", alignItems:"center" }}
+            onMouseEnter={e=>e.currentTarget.style.color=C.text} onMouseLeave={e=>e.currentTarget.style.color=C.text3}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <FilterBtn mode="pending"  label="Pending"  count={pendingAll.length}  color={C.amber} />
+        <FilterBtn mode="imported" label="Imported" count={importedAll.length} color={C.green} />
+        <FilterBtn mode="omitted"  label="Omitted"  count={omittedAll.length}  color={C.text3} />
+      </div>
+
+      {/* Student search */}
+      <div style={{ position:"relative", marginBottom:"1.25rem" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2.5" strokeLinecap="round" style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none" }}>
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input value={studentSearch} onChange={e=>setStudentSearch(e.target.value)}
+          placeholder="Search participant..."
+          style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:"0.55rem 0.75rem 0.55rem 2.25rem", fontSize:13, color:C.text, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }} />
+        {studentSearch && (
+          <button onClick={()=>setStudentSearch("")}
+            style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:C.text3, display:"flex", padding:2 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        )}
+      </div>
+
+      {loadingCal ? <Dots /> : studentSearch.length >= 2 ? (
+        /* ── Student results ── */
+        <div style={{ ...CARD, borderRadius:14, overflow:"hidden" }}>
+          <div style={{ padding:"0.55rem 1rem", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <p style={{ fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase" }}>
+              Results for "{studentSearch}"
+            </p>
+            {!loadingSearch && <p style={{ fontSize:11, color:C.text3 }}>{studentResults.length} record{studentResults.length!==1?"s":""}</p>}
+          </div>
+          {loadingSearch ? <Dots /> : studentResults.length === 0 ? (
+            <div style={{ padding:"2rem", textAlign:"center" }}>
+              <p style={{ fontSize:13, color:C.text3 }}>No results for "{studentSearch}" in {MONTHS[month-1]} {year}.</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 85px 85px 70px", gap:"0.5rem", padding:"0.4rem 1rem", background:C.surface2, borderBottom:`1px solid ${C.border2}` }}>
+                {["Student / Class","Join","Leave","Duration"].map(h => (
+                  <p key={h} style={{ fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase" }}>{h}</p>
+                ))}
+              </div>
+              {studentResults.map((r, i) => (
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 85px 85px 70px", gap:"0.5rem", alignItems:"center", padding:"0.65rem 1rem", borderBottom:`1px solid ${C.border}` }}>
+                  <div style={{ minWidth:0 }}>
+                    <p style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.student_name}</p>
+                    <p style={{ fontSize:11, color:C.text3, marginTop:1 }}>{fmtDate(r.session.class_date)} · {r.session.class_title}</p>
+                  </div>
+                  <p style={{ fontSize:12, color:C.text3 }}>{fmtTime(r.join_time)}</p>
+                  <p style={{ fontSize:12, color:C.text3 }}>{fmtTime(r.leave_time)}</p>
+                  <p style={{ fontSize:13, fontWeight:700, color:C.green, textAlign:"right" }}>{fmtMins(r.duration_seconds)}</p>
+                </div>
+              ))}
+              <div style={{ padding:"0.55rem 1rem", display:"flex", justifyContent:"flex-end" }}>
+                <button onClick={() => {
+                  const rows = [["Student","Class","Date","Join","Leave","Duration (min)"].join(",")];
+                  for (const r of studentResults)
+                    rows.push([`"${r.student_name}"`,`"${r.session.class_title}"`,r.session.class_date,r.join_time||"",r.leave_time||"",Math.round((r.duration_seconds||0)/60)].join(","));
+                  const el = Object.assign(document.createElement("a"),{ href:URL.createObjectURL(new Blob(["﻿"+rows.join("\n")],{type:"text/csv;charset=utf-8;"})), download:`attendance_${studentSearch}_${year}-${String(month).padStart(2,"0")}.csv` });
+                  el.click(); URL.revokeObjectURL(el.href);
+                }} style={{ background:"none", border:`1px solid ${C.border}`, borderRadius:7, padding:"3px 10px", fontSize:11, fontWeight:700, color:C.text3, cursor:"pointer", fontFamily:"inherit" }}>
+                  Export CSV
+                </button>
+              </div>
+            </>
+          )}
         </div>
       ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:"0.6rem" }}>
-          {classes.map(cls=>(
-            <button key={cls.summary} onClick={()=>loadDetail(cls)}
-              style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"1rem 1.25rem", cursor:"pointer", textAlign:"left", WebkitTapHighlightColor:"transparent", transition:"background 0.15s" }}
-              onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-              onMouseLeave={e=>e.currentTarget.style.background=C.surface}>
-              <div style={{ display:"flex", alignItems:"center", gap:"0.75rem", marginBottom:"0.4rem" }}>
-                <p style={{ fontSize:14, fontWeight:700, color:C.text, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cls.summary}</p>
-                <span style={typeBadge(cls.type)}>{cls.type}</span>
-              </div>
-              <div style={{ display:"flex", gap:"1.25rem", alignItems:"center" }}>
-                <p style={{ fontSize:11, color:C.text3 }}>Coach: <span style={{ color:C.text2, fontWeight:600 }}>{cls.coach}</span></p>
-                <p style={{ fontSize:11, color:C.text3 }}><span style={{ color:C.text2, fontWeight:600 }}>{cls.count}</span> sessions</p>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.text3} strokeWidth="2" strokeLinecap="round" style={{ marginLeft:"auto", flexShrink:0 }}><polyline points="9 18 15 12 9 6"/></svg>
-              </div>
-            </button>
-          ))}
-        </div>
+        /* ── Session list ── */
+        visibleSessions.length === 0 ? (
+          <div style={{ ...CARD, borderRadius:14, padding:"2.5rem", textAlign:"center" }}>
+            <p style={{ fontSize:13, color:C.text3 }}>
+              {calSessions.length === 0
+                ? `No sessions found for ${MONTHS[month-1]} ${year}.`
+                : `No ${filterMode === "all" ? "" : filterMode + " "}sessions for ${weekLabel}.`}
+            </p>
+          </div>
+        ) : (
+          <div style={{ ...CARD, borderRadius:14, overflow:"hidden" }}>
+            {visibleSessions.map(s => <SessionRow key={s.id} s={s} />)}
+          </div>
+        )
       )}
     </div>
   );
@@ -6860,7 +8848,7 @@ function AttendanceView() {
 
 // ── PLACEHOLDER (eliminado — reemplazado por AttendanceView rediseñado) ──
 // ── CLASS PREP VIEW (Dilo Coach GEM) ──────────────────────────
-const CLASS_PREP_SYSTEM = `You are a class design assistant for DILO Club coaches. Your job is to:
+const CLASS_PREP_TEMPLATE = `You are a class design assistant for DILO Club coaches. Your job is to:
 - Design conversation-based English classes
 - Explain grammar clearly and simply (the why, not just the how)
 - Guide the coach step by step — never dump everything at once
@@ -6919,7 +8907,25 @@ Never generate the full class in one shot — respect the step-by-step flow.
 DILO CLUB OFFICIAL CURRICULUM
 The following is the complete Dilo Club program. Use it as your primary reference for every class you design — chapters, grammar points, vocabulary, idioms, and phrasal verbs must always align with this curriculum.
 
-${DILO_KNOWLEDGE}`;
+__DILO_KNOWLEDGE__`;
+
+// Curriculum (~200 KB de markdown) se carga solo cuando se abre Dilo Coach/Student,
+// no en el bundle inicial.
+let _classPrepSystem = null;
+async function getClassPrepSystem() {
+  if (_classPrepSystem) return _classPrepSystem;
+  const mods = await Promise.all([
+    import("./knowledge/diloclub_foundation_v5.1.md?raw"),
+    import("./knowledge/diloclub_a1_v5.1.md?raw"),
+    import("./knowledge/diloclub_a2_v5.1.md?raw"),
+    import("./knowledge/diloclub_b1_v5.1.md?raw"),
+    import("./knowledge/diloclub_b2_v5.1.md?raw"),
+    import("./knowledge/diloclub_c1_v5.1.md?raw"),
+    import("./knowledge/diloclub_c2_v5.1.md?raw"),
+  ]);
+  _classPrepSystem = CLASS_PREP_TEMPLATE.replace("__DILO_KNOWLEDGE__", mods.map(m => m.default).join("\n\n---\n\n"));
+  return _classPrepSystem;
+}
 
 const PREP_SUGGESTIONS = [
   "Muéstrame el índice del capítulo actual",
@@ -6930,12 +8936,13 @@ const PREP_SUGGESTIONS = [
 
 async function streamGemini(messages, onChunk, signal) {
   const key = import.meta.env.VITE_GEMINI_API_KEY;
+  const systemText = await getClassPrepSystem();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?key=${key}&alt=sse`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      system_instruction: { parts: [{ text: CLASS_PREP_SYSTEM }] },
+      system_instruction: { parts: [{ text: systemText }] },
       contents: messages.map(m => ({
         role:  m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
@@ -7242,17 +9249,9 @@ function normalizeTime(t) {
 // ── WHATSAPP VIEW ──────────────────────────────────────────────
 const WA_TEMPLATES = [
   {
-    name: "hello_world",
-    label: "Hello World (test)",
-    language: "en_US",
-    params: [],
-    description: "Default Meta test template.",
-    category: "test",
-  },
-  {
     name: "dilo_class_reminder",
     label: "Recordatorio de clase",
-    language: "es",
+    language: "en",
     params: [
       { name: "nombre",   label: "Nombre del estudiante" },
       { name: "hora",     label: "Hora de la clase" },
@@ -7264,7 +9263,7 @@ const WA_TEMPLATES = [
   {
     name: "dilo_payment_reminder",
     label: "Recordatorio de pago",
-    language: "es",
+    language: "en",
     params: [
       { name: "nombre",   label: "Nombre del estudiante" },
       { name: "monto",    label: "Monto (₡)" },
@@ -7276,7 +9275,7 @@ const WA_TEMPLATES = [
   {
     name: "dilo_payment_overdue",
     label: "Pago vencido",
-    language: "es",
+    language: "en",
     params: [
       { name: "nombre",   label: "Nombre del estudiante" },
       { name: "monto",    label: "Monto (₡)" },
@@ -7288,7 +9287,7 @@ const WA_TEMPLATES = [
   {
     name: "dilo_announcement",
     label: "Anuncio general",
-    language: "es",
+    language: "en",
     params: [
       { name: "nombre",   label: "Nombre (o 'comunidad Dilo')" },
       { name: "mensaje",  label: "Mensaje del anuncio" },
@@ -7601,21 +9600,64 @@ function WhatsAppView({ user, role }) {
   );
 }
 
+function renderMarkdown(text) {
+  const lines = text.split("\n");
+  let html = "";
+  let inList = false;
+  for (const raw of lines) {
+    const esc = raw.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g,"<em>$1</em>");
+    const dimTs = s => s.replace(/\b(\d{1,2}:\d{2}(?::\d{2})?)\b/g,
+      "<span style='color:rgba(240,236,224,0.3);font-size:11px'>$1</span>");
+    const boldTitle = s => { const m=s.match(/^(.{5,}?):\s/); return m?`<strong>${m[1]}:</strong> ${s.slice(m[0].length)}`:s; };
+    // Teams-style bullets: • or ▶
+    if (/^[•▶►]\s*/.test(raw)) {
+      if (!inList) { html += "<ul style='margin:0.4rem 0;padding:0;list-style:none'>"; inList = true; }
+      const content = dimTs(boldTitle(esc.replace(/^[•▶►]\s*/,"")));
+      html += `<li style='margin-bottom:0.6rem;padding-left:0.75rem;border-left:2px solid rgba(240,236,224,0.12)'>${content}</li>`;
+    }
+    // Standard markdown bullets
+    else if (/^[-*]\s+/.test(raw)) {
+      if (!inList) { html += "<ul style='margin:0.35rem 0 0.35rem 1.1rem;padding:0'>"; inList = true; }
+      html += `<li style='margin-bottom:0.2rem'>${esc.replace(/^[-*]\s+/,"")}</li>`;
+    }
+    else {
+      if (inList) { html += "</ul>"; inList = false; }
+      if (/^#{1,3}\s+/.test(raw)) {
+        html += `<p style='font-weight:700;font-size:13px;margin:0.7rem 0 0.25rem;color:rgba(240,236,224,0.9)'>${esc.replace(/^#+\s+/,"")}</p>`;
+      } else if (esc.trim() === "") {
+        html += "<br/>";
+      } else {
+        html += `<p style='margin:0 0 0.3rem'>${esc}</p>`;
+      }
+    }
+  }
+  if (inList) html += "</ul>";
+  return html;
+}
+
+function stripMd(text) {
+  return text.replace(/\*\*(.+?)\*\*/g,"$1").replace(/\*(.+?)\*/g,"$1")
+    .replace(/^[•▶►\-*#]+\s*/gm,"").replace(/\n+/g," ").trim();
+}
+
 function MeetingRecapsView({ user, role }) {
   const isAdmin = role === "admin";
   const today   = crToday();
 
   // ── Register card state (admin only) ──
-  const [regDate,    setRegDate]    = useState(today);
-  const [events,     setEvents]     = useState([]);
-  const [loadingEvs, setLoadingEvs] = useState(false);
-  const [selEvent,   setSelEvent]   = useState("");
-  const [regTime,    setRegTime]    = useState("");
-  const [recapText,  setRecapText]  = useState("");
-  const [saving,     setSaving]     = useState(false);
-  const [saveOk,     setSaveOk]     = useState(false);
-  const [saveErr,    setSaveErr]    = useState("");
-  const [regErrors,  setRegErrors]  = useState({});
+  const [regDate,       setRegDate]       = useState(today);
+  const [events,        setEvents]        = useState([]);
+  const [loadingEvs,    setLoadingEvs]    = useState(false);
+  const [doneRecapNames,setDoneRecapNames]= useState(new Set());
+  const [selEvent,      setSelEvent]      = useState("");
+  const [regTime,       setRegTime]       = useState("");
+  const [recapText,     setRecapText]     = useState("");
+  const [saving,        setSaving]        = useState(false);
+  const [saveOk,        setSaveOk]        = useState(false);
+  const [saveErr,       setSaveErr]       = useState("");
+  const [regErrors,     setRegErrors]     = useState({});
 
   // ── Access card state ──
   const [accDate,     setAccDate]     = useState(today);
@@ -7629,19 +9671,21 @@ function MeetingRecapsView({ user, role }) {
   const [editSaving,  setEditSaving]  = useState(false);
   const [editErr,     setEditErr]     = useState("");
 
-  // Fetch Teams events when regDate changes
+  // Fetch Teams events + existing recaps when regDate changes
   useEffect(() => {
     if (!isAdmin || !regDate) return;
     setLoadingEvs(true); setSelEvent(""); setRegTime(""); setEvents([]);
-    fetch(ATTENDANCE_URL, {
-      method: "POST",
-      headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "calendar-events", date: regDate }),
-    })
-      .then(r => r.json())
-      .then(d => setEvents(d.events || []))
-      .catch(() => setEvents([]))
-      .finally(() => setLoadingEvs(false));
+    Promise.all([
+      fetch(ATTENDANCE_URL, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + ANON_KEY, apikey: ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "calendar-events", date: regDate }),
+      }).then(r => r.json()).catch(() => ({ events: [] })),
+      supabase.from("meeting_recaps").select("event_name").eq("class_date", regDate),
+    ]).then(([calData, { data: existingRecaps }]) => {
+      setEvents(calData.events || []);
+      setDoneRecapNames(new Set((existingRecaps || []).map(r => r.event_name)));
+    }).finally(() => setLoadingEvs(false));
   }, [regDate, isAdmin]);
 
   // Graph returns CR local time via Prefer header — parse string directly
@@ -7673,7 +9717,9 @@ function MeetingRecapsView({ user, role }) {
         event_name: selEvent, recap: recapText.trim(), created_by: user?.id || null,
       });
       if (error) throw error;
-      setSaveOk(true); setSelEvent(""); setRegTime(""); setRecapText("");
+      setSaveOk(true);
+      setDoneRecapNames(prev => new Set([...prev, selEvent]));
+      setSelEvent(""); setRegTime(""); setRecapText("");
       setTimeout(() => setSaveOk(false), 4000);
       if (accDate === regDate) fetchRecaps(regDate);
     } catch (e) {
@@ -7761,13 +9807,18 @@ function MeetingRecapsView({ user, role }) {
               <label style={labelSt}>
                 Class {loadingEvs && <span style={{ color: C.text3, fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>— loading…</span>}
               </label>
-              <select value={selEvent} onChange={e => handleSelectEvent(e.target.value)}
-                style={{ ...inputSt, borderColor: regErrors.selEvent ? "#c20000" : "rgba(240,236,224,0.1)", cursor: "pointer" }}
-                disabled={loadingEvs || events.length === 0}>
-                <option value="">{loadingEvs ? "Loading classes…" : events.length === 0 ? "No classes on this date" : "Select class…"}</option>
-                {events.map(ev => <option key={ev.id} value={ev.subject}>{ev.subject}</option>)}
-              </select>
-              {regErrors.selEvent && <p style={{ fontSize: 11, color: "#c20000", marginTop: 4 }}>Select a class.</p>}
+              {!loadingEvs && events.length > 0 && events.every(ev => doneRecapNames.has(ev.subject))
+                ? <div style={{ color: C.green, fontWeight: 700, fontSize: 13 }}>✓ All recaps sent</div>
+                : <>
+                    <select value={selEvent} onChange={e => handleSelectEvent(e.target.value)}
+                      style={{ ...inputSt, borderColor: regErrors.selEvent ? "#c20000" : "rgba(240,236,224,0.1)", cursor: "pointer" }}
+                      disabled={loadingEvs || events.length === 0}>
+                      <option value="">{loadingEvs ? "Loading classes…" : events.length === 0 ? "No classes on this date" : "Select class…"}</option>
+                      {events.filter(ev => !doneRecapNames.has(ev.subject)).map(ev => <option key={ev.id} value={ev.subject}>{ev.subject}</option>)}
+                    </select>
+                    {regErrors.selEvent && <p style={{ fontSize: 11, color: "#c20000", marginTop: 4 }}>Select a class.</p>}
+                  </>
+              }
             </div>
 
             <div style={{ marginBottom: "1rem" }}>
@@ -7874,9 +9925,13 @@ function MeetingRecapsView({ user, role }) {
                           </>
                         ) : (
                           <>
-                            <p style={{ fontSize: 12, color: C.text2, lineHeight: 1.65, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                              {isOpen ? r.recap : preview}
-                            </p>
+                            {isOpen
+                              ? <div style={{ fontSize: 12, color: C.text2, lineHeight: 1.65, wordBreak: "break-word" }}
+                                  dangerouslySetInnerHTML={{ __html: renderMarkdown(r.recap) }} />
+                              : <p style={{ fontSize: 12, color: C.text2, lineHeight: 1.65, wordBreak: "break-word", margin: 0 }}>
+                                  {stripMd(r.recap).slice(0, 140)}{r.recap.length > 140 ? "…" : ""}
+                                </p>
+                            }
                             {r.recap.length > 140 && (
                               <button onClick={() => setExpanded(ex => ({ ...ex, [r.id]: !isOpen }))}
                                 style={{ background: "transparent", border: "none", color: C.green, fontFamily: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer", padding: "0.4rem 0 0", letterSpacing: "0.06em", textTransform: "uppercase" }}>
@@ -7932,6 +9987,14 @@ export default function DiloApp({ user, onLogout = () => {} }) {
   }, []);
 
   const renderView = () => {
+    // Guards de rol — el sidebar solo oculta los links; esto bloquea el acceso real
+    const ADMIN_ONLY = ["coaches", "students", "cashier", "whatsapp", "invites", "estudiantes", "dilo-coach"];
+    const STAFF_ONLY = ["next-classes", "class-recaps", "dinamicas", "my-hours", "new-class-feedback", "send-feedback", "progress"];
+    if (ADMIN_ONLY.includes(active) && role !== "admin")
+      return <PlaceholderView title="Access denied" desc="This section is only available to administrators." icon="home" />;
+    if (STAFF_ONLY.includes(active) && role === "student")
+      return <PlaceholderView title="Access denied" desc="This section is only available to coaches." icon="home" />;
+
     if (active === "dashboard") {
       if (role === "admin") return <AdminDashboard />;
       if (role === "coach") return <CoachDashboard user={user} />;
@@ -7954,9 +10017,11 @@ export default function DiloApp({ user, onLogout = () => {} }) {
     if (active === "perfil-me")    return <ProfileView user={user} defaultSection="me"  setActive={setActive} />;
     if (active === "estudiantes")  return <AttendanceView />;
     if (active === "my-hours")     return <MyHoursView user={user} />;
+    if (active === "progress")     return <ProgressView user={user} />;
     if (active === "coaches")         return <CoachesView />;
     if (active === "students")        return <StudentsView />;
     if (active === "class-recaps")  return <MeetingRecapsView user={user} role={role} />;
+    if (active === "cashier")        return <CashierView />;
     if (active === "whatsapp")      return <WhatsAppView user={user} role={role} />;
     if (active === "dinamicas")    return <DinamicasView user={user} role={role} />;
     const placeholders = {
