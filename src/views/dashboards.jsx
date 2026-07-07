@@ -21,7 +21,7 @@ export function StudentDashboard() {
   const done = practicas.filter(p => p.done).length;
 
   return (
-    <div style={{ maxWidth: 860, width: "100%" }}>
+    <div style={{ maxWidth: 760, width: "100%" }}>
       {/* Next class banner */}
       <div style={{ ...CARD, borderRadius: 16, padding: "1.25rem 1.5rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "1rem" }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(109,181,138,0.1)", border: `1px solid rgba(109,181,138,0.25)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -366,7 +366,7 @@ export function CoachDashboard({ user }) {
   }
 
   return (
-    <div style={{ maxWidth: 700, width:"100%" }}>
+    <div style={{ maxWidth: 760, width:"100%" }}>
       {/* Next Class banner */}
       {loading ? null : nextClass ? (
         <div style={{ ...CARD, borderRadius:16, padding:"1.25rem 1.5rem", marginBottom:"1.25rem" }}>
@@ -651,7 +651,7 @@ export function AdminDashboard() {
   const ADMIN_COACH_COLORS = getCoachColors();
 
   return (
-    <div style={{ maxWidth: 900, width: "100%" }}>
+    <div style={{ maxWidth: 1040, width: "100%" }}>
       {/* Week navigator */}
       <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.5rem" }}>
         <button onClick={() => setWeekOffset(w => w - 1)}

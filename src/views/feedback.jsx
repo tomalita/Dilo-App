@@ -25,7 +25,7 @@ export function FeedbacksHub({ setActive, role }) {
   });
 
   return (
-    <div style={{ maxWidth: 560, width: "100%" }}>
+    <div style={{ maxWidth: 760, width: "100%" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         {cards.map((card, idx) => (
           <button key={idx} onClick={() => setActive(card.id)}
@@ -994,7 +994,7 @@ export function ClassFeedbackView({ user, role, setActive }) {
   });
 
   return (
-    <div style={{ maxWidth:800, width:"100%" }}>
+    <div style={{ maxWidth:760, width:"100%" }}>
       <div style={{ marginBottom:"1.25rem" }}>
         <BackBtn onClick={() => setActive("feedbacks")} />
         <h2 style={{ fontSize:"clamp(1.2rem,3vw,1.6rem)", fontWeight:900, letterSpacing:"-0.02em", color:C.text, marginBottom:"1rem" }}>Class Feedback Sent</h2>
@@ -1120,7 +1120,7 @@ export function StudentFeedbackView({ user, role, setActive }) {
   const isNoShow = r => r.no_show === true;
 
   return (
-    <div style={{ maxWidth:800, width:"100%" }}>
+    <div style={{ maxWidth:760, width:"100%" }}>
       <div style={{ marginBottom:"1.25rem" }}>
         <BackBtn onClick={() => setActive("feedbacks")} />
         <h2 style={{ fontSize:"clamp(1.2rem,3vw,1.6rem)", fontWeight:900, letterSpacing:"-0.02em", color:C.text, marginBottom:"1rem" }}>Student Feedback Sent</h2>
@@ -1199,7 +1199,7 @@ export function StudentSurveysView({ user, role, setActive }) {
   }).slice().reverse();
 
   return (
-    <div style={{ maxWidth:800, width:"100%" }}>
+    <div style={{ maxWidth:760, width:"100%" }}>
       <div style={{ marginBottom:"1.25rem" }}>
         <BackBtn onClick={() => setActive("feedbacks")} />
         <p style={{ fontSize:10, fontWeight:700, letterSpacing:"0.14em", textTransform:"uppercase", color:C.text3, marginBottom:4 }}>FeedbackHub</p>
@@ -1220,7 +1220,7 @@ export function StudentSurveysView({ user, role, setActive }) {
         </div>
       )}
       {loading ? (
-        <div style={{ display:"flex", justifyContent:"center", gap:6, padding:"2rem" }}>{[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div>
+        <div style={{ ...CARD, borderRadius:14, padding:"2rem", display:"flex", justifyContent:"center", gap:6 }}>{[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}</div>
       ) : filtered.length === 0 ? (
         <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center" }}>
           <p style={{ fontSize:13, color:C.text3 }}>No surveys yet.</p>

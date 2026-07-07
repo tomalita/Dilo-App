@@ -40,19 +40,20 @@ export function InvitesView({ user }) {
   const createCode = async () => {
     setCreating(true); setError(null);
     const code = generateCode();
-    const { error: err } = await supabase.from("invite_codes").insert({
+    const { data, error: err } = await supabase.from("invite_codes").insert({
       code, rol: form.rol, plan: form.rol === "student" ? form.plan : null, creado_por: user?.id || null,
-    });
-    if (err) setError("Error creating code. Please try again.");
-    else await loadCodes();
+    }).select().single();
+    if (err || !data) setError("Error creating code. Please try again.");
+    else setCodes(prev => [data, ...prev]); // insert optimista — sin recargar toda la lista
     setCreating(false);
   };
 
   const deleteCode = async (id) => {
     if (!window.confirm("Delete this code?")) return;
     setDeleting(id);
-    await supabase.from("invite_codes").delete().eq("id", id);
-    await loadCodes();
+    const { error: err } = await supabase.from("invite_codes").delete().eq("id", id);
+    if (err) { setDeleting(null); toast("Could not delete code"); return; }
+    setCodes(prev => prev.filter(c => c.id !== id)); // remove optimista — sin flash
     setDeleting(null);
   };
 
@@ -119,7 +120,7 @@ export function InvitesView({ user }) {
       </div>
 
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "1rem" }}>
+        <div style={{ ...CARD, borderRadius: 14, padding: "2rem", display: "flex", justifyContent: "center", gap: 6 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.text3, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
         </div>
       ) : displayed.length === 0 ? (

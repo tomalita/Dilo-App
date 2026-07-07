@@ -400,7 +400,7 @@ export function MasterSchedule({ role, user }) {
     : `${weekDates[0].getDate()} ${mo[weekDates[0].getMonth()]} – ${weekDates[5].getDate()} ${mo[weekDates[5].getMonth()]}, ${weekDates[0].getFullYear()}`;
 
   return (
-    <div style={{ width: "100%", maxWidth: 1000 }}>
+    <div style={{ width: "100%", maxWidth: 1040 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", position: "relative" }}>
         <button onClick={() => setWeekOffset(w => Math.max(MIN_OFFSET, w - 1))}
           style={{ background: "none", border: `1px solid ${C.border2}`, borderRadius: 8, padding: "4px 12px", color: C.text2, fontSize: 18, cursor: "pointer", lineHeight: 1, flexShrink: 0 }}>‹</button>
@@ -421,7 +421,7 @@ export function MasterSchedule({ role, user }) {
       </div>
 
       {loading && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "3rem", gap: 8 }}>
+        <div style={{ ...CARD, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", padding: "3rem", gap: 8 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.text3, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
         </div>
       )}

@@ -192,7 +192,7 @@ export function WhatsAppView({ user, role }) {
   });
 
   return (
-    <div style={{ padding: "1.5rem", maxWidth: 680, margin: "0 auto" }}>
+    <div style={{ maxWidth: 760, width: "100%" }}>
       <p style={{ color: C.text2, fontSize: 13, marginBottom: "1.25rem" }}>
         Send WhatsApp messages to students and coaches via Meta Cloud API.
       </p>

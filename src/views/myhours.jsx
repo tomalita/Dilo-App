@@ -109,14 +109,10 @@ export function MyHoursView({ user }) {
   });
 
   return (
-    <div style={{ flex:1, overflowY:"auto", overflowX:"clip", padding:"1.25rem",
-      paddingLeft:"max(1.25rem,env(safe-area-inset-left))",
-      paddingRight:"max(1.25rem,env(safe-area-inset-right))",
-      paddingBottom:"max(1.5rem,env(safe-area-inset-bottom))",
-      scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
+    <div style={{ maxWidth:760, width:"100%" }}>
 
       {/* Month nav */}
-      <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.5rem", maxWidth:600 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.5rem", maxWidth:760 }}>
         <button onClick={()=>setMonthOffset(p=>p-1)}
           style={{ background:"none", border:`1px solid ${C.border2}`, borderRadius:8, padding:"4px 12px", color:C.text2, fontSize:18, cursor:"pointer", lineHeight:1, flexShrink:0 }}>‹</button>
         <span style={{ flex:1, textAlign:"center", fontSize:13, fontWeight:700, color:C.text }}>
@@ -127,7 +123,7 @@ export function MyHoursView({ user }) {
       </div>
 
       {loading && (
-        <div style={{ maxWidth:600, display:"flex", justifyContent:"center", padding:"3rem 0", gap:8 }}>
+        <div style={{ ...CARD, borderRadius:14, maxWidth:760, display:"flex", justifyContent:"center", padding:"3rem 0", gap:8 }}>
           {[0,1,2].map(i => (
             <div key={i} style={{ width:8, height:8, borderRadius:"50%", background:C.text3,
               animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />
@@ -138,7 +134,7 @@ export function MyHoursView({ user }) {
 
       {/* Desglose quincenal — pagos son quincenales */}
       {!loading && events && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:"0.75rem", marginBottom:"1rem", maxWidth:600 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))", gap:"0.75rem", marginBottom:"1rem", maxWidth:760 }}>
           {[
             { label:`${MONTHS_SHORT[month]} 1–15`,  sub:"First payment",  count:q1Count, amount:q1Total },
             { label:`${MONTHS_SHORT[month]} 16–${lastDay}`, sub:"Second payment", count:q2Count, amount:q2Total },
@@ -155,7 +151,7 @@ export function MyHoursView({ user }) {
       )}
 
       {!loading && events && (
-        <div style={{ ...CARD, borderRadius:14, overflowX:"auto", WebkitOverflowScrolling:"touch", maxWidth:600 }}>
+        <div style={{ ...CARD, borderRadius:14, overflowX:"auto", WebkitOverflowScrolling:"touch", maxWidth:760 }}>
           <table style={{ width:"100%", borderCollapse:"collapse", minWidth:380 }}>
             <thead>
               <tr>

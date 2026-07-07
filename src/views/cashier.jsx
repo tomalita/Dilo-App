@@ -149,7 +149,7 @@ export function CashierView() {
   const labelStyle = { fontSize: 10, fontWeight: 700, color: C.text3, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "0.4rem" };
 
   return (
-    <div style={{ width: "100%", maxWidth: 860 }}>
+    <div style={{ width: "100%", maxWidth: 1040 }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
         <div>
@@ -202,7 +202,7 @@ export function CashierView() {
 
       {/* Table */}
       {loading ? (
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "3rem" }}>
+        <div style={{ ...CARD, borderRadius: 14, padding: "3rem", display: "flex", justifyContent: "center", gap: 6 }}>
           {[0,1,2].map(i => <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: C.text3, animation: `pulse 1.2s ease-in-out ${i*0.2}s infinite` }} />)}
         </div>
       ) : visible.length === 0 ? (

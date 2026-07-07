@@ -97,7 +97,7 @@ export function ProgressView({ user }) {
   );
 
   return (
-    <div style={{ width: "100%", maxWidth: 800 }}>
+    <div style={{ width: "100%", maxWidth: 760 }}>
       {/* Student picker */}
       <div style={{ ...CARD, borderRadius: 14, padding: "1.1rem 1.25rem", marginBottom: "1rem",
         display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>

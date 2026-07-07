@@ -269,7 +269,7 @@ export function ClassPrepView() {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden",
-      height: "100%", maxWidth: 780, width: "100%" }}>
+      height: "100%", maxWidth: 760, width: "100%" }}>
 
       {/* Toolbar */}
       {messages.length > 0 && (

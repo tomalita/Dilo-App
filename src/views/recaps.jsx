@@ -213,7 +213,7 @@ export function MeetingRecapsView({ user, role }) {
   const labelSt = { display: "block", fontSize: 11, fontWeight: 600, color: C.text3, marginBottom: "0.4rem", textTransform: "uppercase", letterSpacing: "0.1em" };
 
   return (
-    <div style={{ maxWidth: 780, width: "100%" }}>
+    <div style={{ maxWidth: 760, width: "100%" }}>
       <div style={{ marginBottom: "1.75rem" }}>
         <p style={{ fontSize: 13, color: C.text2 }}>Review AI generated summaries from previous classes.</p>
       </div>

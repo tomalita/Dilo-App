@@ -645,7 +645,7 @@ export function CoachesView() {
 
   // ── Render ────────────────────────────────────────────────────────
   return (
-    <div style={{ width: "100%", maxWidth: 800 }}>
+    <div style={{ width: "100%", maxWidth: 1040 }}>
       {/* ── Tab toggle ── */}
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
         {[["week","Week"],["month","Month"]].map(([id, label]) => (

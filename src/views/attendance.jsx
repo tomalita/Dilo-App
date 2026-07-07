@@ -412,6 +412,10 @@ export function AttendanceView() {
       {[0,1,2].map(i=><div key={i} style={{ width:7, height:7, borderRadius:"50%", background:C.text3, animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite` }}/>)}
     </div>
   );
+  // Dots dentro de una tarjeta — evita el pop de borde cuando reemplaza contenido con CARD
+  const CardDots = () => (
+    <div style={{ ...CARD, borderRadius:14, marginBottom:"1rem" }}><Dots /></div>
+  );
 
   const NavBar = ({ right }) => (
     <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.75rem" }}>
@@ -572,7 +576,7 @@ export function AttendanceView() {
     const HDR_STYLE = { fontSize:10, fontWeight:700, color:C.text3, letterSpacing:"0.06em", textTransform:"uppercase" };
 
     return (
-      <div style={{ width:"100%", maxWidth:860 }}>
+      <div style={{ width:"100%", maxWidth:1040 }}>
         <FileInput />
         {importModal && <ImportModal />}
 
@@ -602,7 +606,7 @@ export function AttendanceView() {
         </div>
 
         {/* Attendance table */}
-        {loadingDetail ? <Dots /> : (detailAttendees.length === 0 && detailCoaches.length === 0) ? (
+        {loadingDetail ? <CardDots /> : (detailAttendees.length === 0 && detailCoaches.length === 0) ? (
           <div style={{ ...CARD, borderRadius:14, padding:"2rem", textAlign:"center", marginBottom:"1rem" }}>
             <p style={{ fontSize:13, color:C.text3 }}>Sin datos de asistencia para esta sesión.</p>
           </div>
@@ -822,7 +826,7 @@ export function AttendanceView() {
         )}
       </div>
 
-      {loadingCal ? <Dots /> : studentSearch.length >= 2 ? (
+      {loadingCal ? <CardDots /> : studentSearch.length >= 2 ? (
         /* ── Student results ── */
         <div style={{ ...CARD, borderRadius:14, overflow:"hidden" }}>
           <div style={{ padding:"0.55rem 1rem", borderBottom:`1px solid ${C.border}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>

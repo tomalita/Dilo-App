@@ -290,11 +290,7 @@ export function StudentsView() {
   );
 
   return (
-    <div style={{ flex:1, overflowY:"auto", overflowX:"clip", padding:"1.25rem",
-      paddingLeft:"max(1.25rem,env(safe-area-inset-left))",
-      paddingRight:"max(1.25rem,env(safe-area-inset-right))",
-      paddingBottom:"max(1.5rem,env(safe-area-inset-bottom))",
-      scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
+    <div style={{ maxWidth:1040, width:"100%" }}>
 
       {/* Month nav + filters + Add */}
       <div style={{ display:"flex", alignItems:"center", gap:"0.5rem", marginBottom:"1.25rem", flexWrap:"wrap" }}>
@@ -357,7 +353,7 @@ export function StudentsView() {
       {error && <p style={{ color:"#d95f5f", fontSize:13, marginBottom:"1rem" }}>{error}</p>}
 
       {loading && !students && (
-        <div style={{ display:"flex", justifyContent:"center", alignItems:"center", padding:"3rem 0", gap:6, width:"100%" }}>
+        <div style={{ ...CARD, borderRadius:14, display:"flex", justifyContent:"center", alignItems:"center", padding:"3rem 0", gap:6, width:"100%" }}>
           {[0,1,2].map(i=><div key={i} style={{width:8,height:8,borderRadius:"50%",background:C.text3,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`}}/>)}
         </div>
       )}
