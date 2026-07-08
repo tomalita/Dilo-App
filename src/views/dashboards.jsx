@@ -214,11 +214,14 @@ export function CoachDashboard({ user }) {
     });
   });
 
-  const crNow = new Date(now.getTime() - CR_UTC_OFFSET_MS);
-  const pastOnly = evs => evs.filter(ev => ev.date < crNow);
-  const weekIsFuture = monday > crNow;
-  const missingFbs = getMissingFbs(weekIsFuture ? myClasses : pastOnly(myClasses));
-  const missingMonthFbs = getMissingFbs(pastOnly(myMonthClasses));
+  // Feedback due de la SEMANA = TODAS las clases asignadas esa semana sin feedback
+  // (hecho o pendiente — incluye las que aún no se dieron). Igual criterio que el admin.
+  const missingFbs = getMissingFbs(myClasses);
+  // Feedback due del MES = clases del mes sin feedback hasta el FIN DE LA SEMANA ACTUAL.
+  // Así el mes siempre incluye lo de esta semana (mes ≥ semana) pero no cuenta las
+  // semanas futuras del mes, que inflarían el número.
+  const thisWeekEnd = getWeekBounds(0).saturday;
+  const missingMonthFbs = getMissingFbs(myMonthClasses.filter(ev => ev.date <= thisWeekEnd));
   // Ranking — month-filtered
   const getRankMonthBounds = (offset) => {
     const n = new Date();
